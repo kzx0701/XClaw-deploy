@@ -7,6 +7,7 @@ use std::path::PathBuf;
 #[serde(rename_all = "camelCase")]
 pub struct LocalGatewayConfigResult {
     auth_mode: String,
+    open_responses_enabled: bool,
     source_path: String,
     token: String,
     url: String,
@@ -24,6 +25,18 @@ pub fn load_local_openclaw_gateway_config() -> Result<LocalGatewayConfigResult, 
         .get("gateway")
         .and_then(Value::as_object)
         .ok_or("OpenClaw 配置中缺少 gateway 字段")?;
+    let open_responses_enabled = parsed
+        .get("gateway")
+        .and_then(Value::as_object)
+        .and_then(|gateway| gateway.get("http"))
+        .and_then(Value::as_object)
+        .and_then(|http| http.get("endpoints"))
+        .and_then(Value::as_object)
+        .and_then(|endpoints| endpoints.get("responses"))
+        .and_then(Value::as_object)
+        .and_then(|responses| responses.get("enabled"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
 
     let auth = gateway
         .get("auth")
@@ -61,6 +74,7 @@ pub fn load_local_openclaw_gateway_config() -> Result<LocalGatewayConfigResult, 
 
     Ok(LocalGatewayConfigResult {
         auth_mode,
+        open_responses_enabled,
         source_path: config_path.to_string_lossy().to_string(),
         token,
         url,

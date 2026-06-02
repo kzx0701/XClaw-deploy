@@ -2,12 +2,13 @@
   <article class="panel-card execution-card">
     <header class="card-head">
       <div>
-        <h3>执行任务</h3>
-        <p>先打通“仅打包”的主链路，后续再接上传部署和远端后置命令。</p>
+        <h3>立即执行</h3>
+        <p>确认当前环境和构建产物后，直接开始本次任务。</p>
       </div>
       <Button
+        class="app-primary-button"
         :label="status === 'running' ? '执行中...' : '开始执行'"
-        icon="pi pi-play"
+        :icon="Play"
         :loading="status === 'running'"
         :disabled="!canRun || status === 'running'"
         @click="$emit('run')"
@@ -15,8 +16,14 @@
     </header>
 
     <div v-if="modelValue && project" class="execution-grid">
+      <Alert :variant="resolveAlertVariant('secondary')" :class="[resolveAlertToneClass('secondary'), 'full-span helper-message']">
+        <AlertDescription class="helper-message-copy">
+          当前会优先使用项目默认配置，你可以在这里按本次任务临时修改，不会自动覆盖项目默认值。
+        </AlertDescription>
+      </Alert>
+
       <label class="field">
-        <span>执行模式</span>
+        <span>本次任务</span>
         <Select
           :model-value="modelValue.mode"
           :options="modeOptions"
@@ -28,10 +35,10 @@
       </label>
 
       <label class="field">
-        <span>目标环境</span>
+        <span>部署环境</span>
         <Select
           :model-value="modelValue.environmentName"
-          :options="environmentOptions"
+          :options="props.environmentOptions"
           option-label="label"
           option-value="value"
           fluid
@@ -39,8 +46,8 @@
         />
       </label>
 
-      <label class="field">
-        <span>打包命令</span>
+      <label v-if="modelValue.mode !== 'deploy'" class="field">
+        <span>本次打包命令</span>
         <InputText
           :model-value="modelValue.overrideBuildCommand"
           fluid
@@ -48,8 +55,8 @@
         />
       </label>
 
-      <label class="field">
-        <span>产物目录</span>
+      <label v-if="modelValue.mode !== 'deploy'" class="field">
+        <span>本次产物目录</span>
         <InputText
           :model-value="modelValue.overrideOutputDir"
           fluid
@@ -57,43 +64,65 @@
         />
       </label>
 
-      <div class="toggle-field">
+      <div v-if="modelValue.mode !== 'deploy'" class="toggle-field">
         <label class="field">
-          <span>执行前置校验</span>
+          <span>执行前检查</span>
           <div class="switch-row">
-            <ToggleSwitch :model-value="modelValue.runPrecheck" @update:model-value="updateBoolean('runPrecheck', $event)" />
+            <Switch :model-value="modelValue.runPrecheck" @update:model-value="updateBoolean('runPrecheck', Boolean($event))" />
             <small>{{ modelValue.runPrecheck ? '已启用' : '未启用' }}</small>
           </div>
         </label>
       </div>
+
+      <Alert
+        v-if="modelValue.mode === 'deploy'"
+        :variant="resolveAlertVariant('secondary')"
+        :class="[resolveAlertToneClass('secondary'), 'mode-note']"
+      >
+        <AlertDescription class="helper-message-copy">
+          当前模式会直接使用当前环境的服务器和部署目录执行发布，不会先重新打包。
+        </AlertDescription>
+      </Alert>
     </div>
 
-    <div v-if="summary.length > 0" class="summary-board">
-      <div v-for="item in summary" :key="item.label" class="summary-item">
-        <span>{{ item.label }}</span>
-        <strong>{{ item.value }}</strong>
+    <section v-if="summary.length > 0" class="summary-section">
+      <header class="summary-head">
+        <h4>本次任务摘要</h4>
+        <small>执行前再确认一次关键参数</small>
+      </header>
+      <div class="summary-board">
+        <div v-for="item in summary" :key="item.label" class="summary-item">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+        </div>
       </div>
-    </div>
+    </section>
 
-    <Message v-if="statusMessage" :severity="statusSeverity" :closable="false">
-      {{ statusMessage }}
-    </Message>
+    <Alert v-if="statusMessage" :variant="resolveAlertVariant(statusSeverity)" :class="resolveAlertToneClass(statusSeverity)">
+      <AlertDescription class="helper-message-copy">
+        {{ statusMessage }}
+      </AlertDescription>
+    </Alert>
     <p v-if="!project || !modelValue" class="muted-paragraph">请先导入并选中项目。</p>
   </article>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import Select from 'primevue/select'
-import ToggleSwitch from 'primevue/toggleswitch'
+import { Play } from 'lucide-vue-next'
+import Alert from '@/components/ui/alert/Alert.vue'
+import AlertDescription from '@/components/ui/alert/AlertDescription.vue'
+import Button from '@/components/ui/button/Button.vue'
+import InputText from '@/components/ui/input/Input.vue'
+import Select from '@/components/ui/select/Select.vue'
+import Switch from '@/components/ui/switch/Switch.vue'
 
+import { resolveAlertToneClass, resolveAlertVariant } from '@/lib/ui-status'
 import type { ExecutionDraft, ExecutionStatus, ExecutionSummaryItem, ProjectRecord } from '@/types/task'
 
 const props = defineProps<{
   canRun: boolean
+  environmentOptions: Array<{ label: string; value: string }>
   modelValue: ExecutionDraft | null
   project: ProjectRecord | null
   status: ExecutionStatus
@@ -110,12 +139,6 @@ const modeOptions = [
   { label: '仅打包', value: 'build' },
   { label: '仅部署', value: 'deploy' },
   { label: '打包 + 部署', value: 'build-and-deploy' },
-]
-
-const environmentOptions = [
-  { label: 'dev', value: 'dev' },
-  { label: 'test', value: 'test' },
-  { label: 'prod', value: 'prod' },
 ]
 
 const statusSeverity = computed(() => {
@@ -167,17 +190,40 @@ function updateBoolean(field: keyof ExecutionDraft, value: boolean | undefined) 
 
 .card-head h3 {
   margin: 0;
+  color: #f8fafc;
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
 }
 
 .card-head p {
   margin: 8px 0 0;
-  color: #6d7f7a;
+  color: #8b9bb3;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .execution-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px 20px;
+}
+
+.full-span {
+  grid-column: 1 / -1;
+}
+
+.helper-message {
+  margin: 0;
+  padding: 14px 16px;
+}
+
+.helper-message-copy {
+  display: block;
+  color: #b8c4d8;
+  line-height: 1.7;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .field,
@@ -187,9 +233,10 @@ function updateBoolean(field: keyof ExecutionDraft, value: boolean | undefined) 
 }
 
 .field span {
-  color: #2f433d;
-  font-size: 13px;
+  color: #e2e8f0;
+  font-size: 12px;
   font-weight: 700;
+  letter-spacing: 0.03em;
 }
 
 .switch-row {
@@ -200,7 +247,40 @@ function updateBoolean(field: keyof ExecutionDraft, value: boolean | undefined) 
 }
 
 .switch-row small {
-  color: #6d7f7a;
+  color: #93a4bd;
+  font-size: 12px;
+}
+
+.mode-note {
+  grid-column: 1 / -1;
+}
+
+.summary-section {
+  display: grid;
+  gap: 12px;
+}
+
+.summary-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.summary-head h4,
+.summary-head small {
+  margin: 0;
+}
+
+.summary-head h4 {
+  color: #f8fafc;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.summary-head small {
+  color: #8b9bb3;
+  font-size: 12px;
 }
 
 .summary-board {
@@ -213,13 +293,13 @@ function updateBoolean(field: keyof ExecutionDraft, value: boolean | undefined) 
   display: grid;
   gap: 6px;
   padding: 14px 16px;
-  border: 1px solid rgba(23, 61, 53, 0.08);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 8px;
+  background: #101722;
 }
 
 .summary-item span {
-  color: #6d7f7a;
+  color: #8fa1bc;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -227,18 +307,25 @@ function updateBoolean(field: keyof ExecutionDraft, value: boolean | undefined) 
 }
 
 .summary-item strong {
-  color: #173d35;
+  color: #f8fafc;
   font-size: 14px;
+  line-height: 1.5;
+  word-break: break-word;
 }
 
 .muted-paragraph {
   margin: 0;
-  color: #6d7f7a;
+  color: #8b9bb3;
 }
 
 @media (max-width: 960px) {
   .card-head {
     flex-direction: column;
+  }
+
+  .summary-head {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .execution-grid,

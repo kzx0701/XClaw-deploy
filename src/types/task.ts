@@ -4,6 +4,7 @@ export type AuthType = 'password' | 'privateKey'
 export type UploadStrategy = 'overwrite' | 'clear-and-upload'
 export type ExecutionMode = 'build' | 'deploy' | 'build-and-deploy'
 export type ExecutionStatus = 'idle' | 'running' | 'success' | 'error'
+export type TaskHistoryStatus = 'success' | 'error'
 
 export interface ProjectRecord {
   id: string
@@ -13,6 +14,8 @@ export interface ProjectRecord {
   packageManager: PackageManager
   packageJsonPath: string
   scripts: Record<string, string>
+  detectedBuildCommand?: string
+  detectedOutputDir?: string
   defaultBuildCommand: string
   defaultOutputDir: string
   defaultPrecheckEnabled: boolean
@@ -30,8 +33,35 @@ export interface ProjectScanResult {
   projectType: ProjectType
   packageManager: PackageManager
   scripts: Record<string, string>
+  detectedBuildCommand: string
+  detectedOutputDir: string
   defaultBuildCommand: string
   defaultOutputDir: string
+}
+
+export interface ProjectAiContextFile {
+  content: string
+  path: string
+}
+
+export interface ProjectAiContext {
+  files: ProjectAiContextFile[]
+  packageJson: string
+  projectPath: string
+}
+
+export interface ProjectAiRecommendation {
+  confidence: 'high' | 'medium' | 'low'
+  reason: string
+  recommendedBuildCommand: string
+  recommendedOutputDir: string
+  alternatives: string[]
+}
+
+export interface GatewayAiProjectReviewRequest {
+  context: ProjectAiContext
+  token: string
+  url: string
 }
 
 export interface DeployEnvironmentRecord {
@@ -92,6 +122,27 @@ export interface ExecutionSummaryItem {
   value: string
 }
 
+export interface TaskHistoryRecord {
+  id: string
+  projectId: string
+  projectName: string
+  environmentName: string
+  mode: ExecutionMode
+  status: TaskHistoryStatus
+  buildCommand: string
+  outputDir: string
+  outputPath?: string
+  serverName?: string
+  serverHost?: string
+  remotePath?: string
+  startedAt: string
+  finishedAt: string
+  durationMs: number
+  summary: string
+  errorMessage?: string
+  logs: string[]
+}
+
 export interface LocalBuildRequest {
   projectPath: string
   buildCommand: string
@@ -123,7 +174,22 @@ export interface DeployExecutionContext {
 }
 
 export interface DeployExecutionResult {
-  fallbackUsed?: boolean
+  errorMessage?: string
+  success: boolean
+  steps: string[]
+}
+
+export interface ServerConnectionCheckRequest {
+  authType: AuthType
+  host: string
+  password: string
+  port: number
+  privateKeyPath: string
+  remotePath?: string
+  username: string
+}
+
+export interface ServerConnectionCheckResult {
   success: boolean
   steps: string[]
 }

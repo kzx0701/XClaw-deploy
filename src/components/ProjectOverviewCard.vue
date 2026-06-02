@@ -1,11 +1,10 @@
 <template>
-  <article class="panel-card overview-card">
+  <article ref="overviewCardRef" class="panel-card overview-card">
     <header class="card-head">
       <div>
         <h3>项目概览</h3>
         <p>展示导入识别结果，便于核对当前项目上下文。</p>
       </div>
-      <span class="badge">{{ project ? '已识别' : '等待导入' }}</span>
     </header>
 
     <div v-if="project" class="overview-grid">
@@ -22,14 +21,22 @@
         <strong>{{ project.packageManager }}</strong>
       </div>
       <div class="overview-item">
-        <span>默认打包命令</span>
-        <strong>{{ project.defaultBuildCommand || '未识别' }}</strong>
+        <span>自动识别命令</span>
+        <strong>{{ project.detectedBuildCommand || project.defaultBuildCommand || '未识别' }}</strong>
       </div>
       <div class="overview-item">
-        <span>默认输出目录</span>
-        <strong>{{ project.defaultOutputDir }}</strong>
+        <span>自动识别目录</span>
+        <strong>{{ project.detectedOutputDir || project.defaultOutputDir }}</strong>
       </div>
-      <div class="overview-item wide">
+      <div class="overview-item">
+        <span>当前使用命令</span>
+        <strong>{{ project.defaultBuildCommand || '未配置' }}</strong>
+      </div>
+      <div class="overview-item">
+        <span>当前使用目录</span>
+        <strong>{{ project.defaultOutputDir || '未配置' }}</strong>
+      </div>
+      <div class="overview-item wide path-item">
         <span>本地路径</span>
         <strong>{{ project.localPath }}</strong>
       </div>
@@ -40,17 +47,26 @@
 </template>
 
 <script setup lang="ts">
+import { useTemplateRef } from 'vue'
+
 import type { ProjectRecord } from '@/types/task'
 
 defineProps<{
   project: ProjectRecord | null
 }>()
+
+const overviewCardRef = useTemplateRef<HTMLElement>('overviewCardRef')
+
+defineExpose({
+  overviewCardRef,
+})
 </script>
 
 <style scoped>
 .overview-card {
   grid-column: 1 / -1;
-  min-height: auto;
+  min-height: 372px;
+  height: auto;
 }
 
 .card-head {
@@ -62,22 +78,16 @@ defineProps<{
 
 .card-head h3 {
   margin: 0;
+  color: #f8fafc;
+  font-size: 18px;
+  line-height: 1.2;
 }
 
 .card-head p {
   margin: 8px 0 0;
-  color: #6d7f7a;
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 8px 12px;
-  background: rgba(23, 61, 53, 0.08);
-  color: #173d35;
-  font-size: 12px;
-  font-weight: 700;
+  color: #8b9bb3;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .overview-grid {
@@ -89,29 +99,46 @@ defineProps<{
 .overview-item {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .overview-item span {
-  color: #6d7f7a;
-  font-size: 12px;
+  color: #8fa1bc;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .overview-item strong {
-  color: #172725;
-  font-size: 15px;
-  word-break: break-all;
+  display: block;
+  min-width: 0;
+  color: #f8fafc;
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .wide {
   grid-column: 1 / -1;
 }
 
+.path-item {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.path-item strong {
+  max-width: 100%;
+  white-space: normal;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
 .muted-paragraph {
   margin: 0;
-  color: #6d7f7a;
+  color: #8b9bb3;
 }
 
 @media (max-width: 960px) {

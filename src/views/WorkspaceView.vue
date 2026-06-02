@@ -1,101 +1,234 @@
 <template>
-  <AppShell
-    :projects="projectSummaries"
-    :selected-project-id="selectedProjectId"
-    @delete-project="handleDeleteProject"
-    @import-project="handlePickDirectory"
-    @select-project="handleSelectProject"
-  >
+  <AppShell>
+    <template v-if="appStore.activePanel === 'config' && selectedProjectId" #header-actions>
+      <div class="workspace-header-actions">
+        <Button
+          :icon="Trash2"
+          severity="danger"
+          text
+          rounded
+          class="workspace-delete-button"
+          aria-label="删除项目"
+          title="删除项目"
+          @click="selectedProjectId && openProjectDeleteDialog(selectedProjectId)"
+        />
+        <Button
+          :icon="ArrowLeft"
+          severity="secondary"
+          text
+          rounded
+          class="workspace-back-button"
+          aria-label="返回项目列表"
+          title="返回项目列表"
+          @click="handleBackToProjectList"
+        />
+      </div>
+    </template>
+
     <section v-if="appStore.activePanel === 'config'" class="panel-grid">
-      <article class="panel-card emphasis-card">
-        <p class="eyebrow">MVP 主链路</p>
-        <h3>先打通项目导入，再接配置和执行链路。</h3>
-        <p>当前已支持通过项目路径导入，并识别 package.json、脚本、项目类型和默认打包配置。</p>
-
-        <form class="import-form" @submit.prevent="handleImport">
-          <label class="field">
-            <span>项目路径</span>
-            <InputText v-model="projectPathInput" fluid placeholder="/Users/you/workspace/my-project" />
-          </label>
-
-          <div class="import-actions">
-            <Button type="submit" :label="isImporting ? '识别中...' : '导入项目'" icon="pi pi-folder-open" :loading="isImporting" />
-            <Button
-              type="button"
-              label="选择目录"
-              icon="pi pi-search"
-              severity="secondary"
-              outlined
-              :disabled="isImporting"
-              @click="handlePickDirectory"
-            />
-            <Message severity="secondary" :closable="false" class="inline-message">
-              当前先支持手动输入路径，后续再接目录选择器。
-            </Message>
-          </div>
-        </form>
-
-        <Message v-if="importError" severity="error" :closable="false">
-          {{ importError }}
-        </Message>
-      </article>
-
-      <ProjectOverviewCard :project="latestScannedProject" />
-
-      <ProjectConfigPanel
-        v-model="projectDraft"
-        :project="latestScannedProject"
-        @save-project="handleSaveProjectConfig"
-      />
-
-      <EnvironmentConfigPanel
-        v-model="environmentDraft"
-        :project-id="selectedProjectId"
-        :servers="servers"
-        @save-environment="handleSaveEnvironment"
-      />
-
-      <ExecutionPanel
-        v-model="executionDraft"
-        :can-run="canRunExecution"
-        :project="latestScannedProject"
-        :status="executionStatus"
-        :status-message="executionStatusMessage"
-        :summary="executionSummary"
-        @run="handleRunExecution"
-      />
-
-      <article class="panel-card">
-        <header class="card-head">
-          <h3>脚本摘要</h3>
-          <Tag severity="contrast" rounded>
-            {{ latestScannedProject ? Object.keys(latestScannedProject.scripts).length : 0 }} 条
-          </Tag>
+      <article v-if="!selectedProjectId" class="project-list-page">
+        <header class="project-toolbar">
+          <Button
+            class="app-primary-button"
+            label="导入项目"
+            :icon="Plus"
+            :loading="isImporting"
+            @click="handlePickDirectory"
+          />
         </header>
-        <ul v-if="latestScannedProject" class="task-list">
-          <li v-for="(command, name) in latestScannedProject.scripts" :key="name">
-            <div class="task-item">
-              <Tag severity="secondary" rounded>{{ name }}</Tag>
-              <code>{{ command }}</code>
+
+        <Alert v-if="importError" :variant="resolveAlertVariant('error')" :class="resolveAlertToneClass('error')">
+          {{ importError }}
+        </Alert>
+
+        <div v-if="projectSummaries.length > 0" class="project-card-list">
+          <article
+            v-for="project in projectSummaries"
+            :key="project.id"
+            class="project-card"
+            @click="handleSelectProject(project.id)"
+          >
+            <div class="project-card-top">
+              <div class="project-card-main">
+                <span class="project-icon">
+                  <img :src="projectFolderIcon" alt="" aria-hidden="true" />
+                </span>
+
+                <div class="project-card-body">
+                  <strong>{{ project.name }}</strong>
+                  <span>{{ project.type }}</span>
+                  <p :title="project.path">{{ project.path }}</p>
+                </div>
+              </div>
+
+              <ChevronRight class="project-enter-icon" aria-hidden="true" />
             </div>
-          </li>
-        </ul>
-        <p v-else class="muted-paragraph">导入项目后，这里展示 package.json scripts。</p>
+
+            <div class="project-card-foot">
+              <span>最近更新 {{ formatProjectUpdatedAt(project.updatedAt) }}</span>
+              <div class="project-card-actions">
+                <Button
+                  class="quick-deploy-button"
+                  type="button"
+                  :icon="Send"
+                  severity="primary"
+                  text
+                  rounded
+                  :disabled="!hasQuickDeployOptions(project.id)"
+                  title="一键部署"
+                  @click.stop="toggleQuickDeployMenu($event, project.id)"
+                />
+                <button
+                  type="button"
+                  class="delete-project-button"
+                  title="删除项目记录"
+                  @click.stop="openProjectDeleteDialog(project.id)"
+                >
+                  <Trash2 class="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div v-else class="empty-state compact-empty">
+          <FolderOpen class="empty-state-icon" aria-hidden="true" />
+          <h4>还没有项目</h4>
+          <p>导入一个本地前端项目后，这里会保留项目记录，后续可以直接进入详情继续使用。</p>
+          <Button class="app-primary-button" label="导入第一个项目" :icon="Plus" @click="handlePickDirectory" />
+        </div>
       </article>
+
+      <div v-else class="project-detail-workspace">
+        <Alert v-if="importError" :variant="resolveAlertVariant('error')" :class="resolveAlertToneClass('error')">
+          {{ importError }}
+        </Alert>
+
+        <div class="project-insight-row">
+          <div class="insight-panel insight-panel-wide">
+            <ProjectOverviewCard ref="projectOverviewCardRef" :project="latestScannedProject" />
+          </div>
+
+          <div class="insight-panel">
+            <article class="panel-card script-card project-script-card" :style="projectScriptCardStyle">
+              <header class="card-head">
+                <h3>脚本摘要</h3>
+              </header>
+              <ul v-if="latestScannedProject" class="task-list script-list">
+                <li v-for="(command, name) in latestScannedProject.scripts" :key="name">
+                  <div class="task-item script-item">
+                    <span class="script-name">{{ name }}</span>
+                    <code>{{ command }}</code>
+                  </div>
+                </li>
+              </ul>
+              <p v-else class="muted-paragraph">导入项目后，这里展示 package.json scripts。</p>
+            </article>
+          </div>
+        </div>
+
+        <div class="project-detail-stack">
+          <ExecutionPanel
+            v-model="executionDraft"
+            :can-run="canRunExecution"
+            :environment-options="executionEnvironmentOptions"
+            :project="latestScannedProject"
+            :status="executionStatus"
+            :status-message="executionStatusMessage"
+            :summary="executionSummary"
+            @run="handleRunExecution"
+          />
+
+          <ProjectConfigPanel
+            v-model="projectDraft"
+            :ai-recommendation="projectAiRecommendation"
+            :is-ai-analyzing="isAiAnalyzingProject"
+            :project="latestScannedProject"
+            @apply-ai-recommendation="handleApplyProjectAiRecommendation"
+            @run-ai-analysis="handleRunProjectAiAnalysis"
+            @save-project="handleSaveProjectConfig"
+          />
+
+          <EnvironmentConfigPanel
+            :can-delete="environmentEditorMode === 'edit' && Boolean(environmentDraft?.name && !isPresetEnvironment)"
+            :editor-draft="environmentDraft"
+            :editor-mode="environmentEditorMode"
+            :editor-visible="isEnvironmentEditorVisible"
+            :environment-cards="environmentCards"
+            :is-preset-environment="isPresetEnvironment"
+            :project-id="selectedProjectId"
+            :servers="servers"
+            @check-environment="handleCheckEnvironment"
+            @close-editor="handleCloseEnvironmentEditor"
+            @create-environment="handleCreateEnvironment"
+            @delete-environment="handleConfirmDeleteEnvironment"
+            @delete-environment-card="handleConfirmDeleteEnvironmentByName"
+            @reset-environment="handleResetEnvironmentDraft"
+            @save-environment="handleSaveEnvironment"
+            @select-environment="handleSelectEnvironment"
+            @update:editor-draft="environmentDraft = $event"
+          />
+        </div>
+      </div>
     </section>
 
     <section v-else-if="appStore.activePanel === 'servers'" class="panel-grid">
       <ServerConfigPanel
+        :is-creating="isCreatingServer"
         v-model="serverDraft"
         :selected-server-id="selectedServerId"
         :servers="servers"
+        @back-to-list="handleBackToServerList"
+        @check-server="handleCheckServer"
+        @close-create="handleCloseCreateServer"
         @create-server="handleCreateServer"
+        @delete-server="handleDeleteServer"
         @save-server="handleSaveServer"
         @select-server="handleSelectServer"
       />
     </section>
 
     <section v-else class="panel-grid">
+      <article class="panel-card log-card">
+        <header class="card-head">
+          <div>
+            <h3>本次运行日志</h3>
+            <p class="section-note">日志页保留更详细的技术信息，方便排查执行问题。</p>
+          </div>
+          <Badge :variant="resolveBadgeVariant('contrast')" :class="['rounded-full', resolveBadgeToneClass('contrast')]">
+            {{ gatewayStage }}
+          </Badge>
+        </header>
+        <div class="log-stream">
+          <p v-for="entry in gatewayLogs" :key="entry.id" :data-level="entry.level">
+            [{{ entry.timestamp.slice(11, 19) }}] {{ entry.message }}
+          </p>
+          <p v-if="gatewayLogs.length === 0" class="muted">连接网关后，这里会展示实时消息和日志。</p>
+        </div>
+      </article>
+
+      <article class="panel-card">
+        <header class="card-head">
+          <h3>当前状态</h3>
+          <Badge :variant="resolveBadgeVariant('contrast')" :class="['rounded-full', resolveBadgeToneClass('contrast')]">
+            {{ appStore.connectionLabel }}
+          </Badge>
+        </header>
+        <ul class="task-list">
+          <li>项目导入：已完成</li>
+          <li>环境配置：已完成</li>
+          <li>网关连接：{{ appStore.connectionLabel }}</li>
+          <li>当前阶段：{{ gatewayStage }}</li>
+        </ul>
+        <p class="muted-paragraph">{{ gatewayStageDescription }}</p>
+      </article>
+
+      <TaskHistoryPanel
+        :records="taskHistoryRecords"
+        :selected-record-id="selectedTaskHistoryId"
+        @select-record="selectedTaskHistoryId = $event"
+      />
+
       <GatewayPanel
         :auth-mode="gatewayAuthMode"
         :connection-status="appStore.connectionStatus"
@@ -117,43 +250,186 @@
         @update:gateway-token="gatewayToken = $event"
         @update:gateway-url="gatewayUrl = $event"
       />
-
-      <article class="panel-card log-card">
-        <header class="card-head">
-          <h3>任务日志</h3>
-          <Tag severity="contrast" rounded>{{ gatewayStage }}</Tag>
-        </header>
-        <div class="log-stream">
-          <p v-for="entry in gatewayLogs" :key="entry.id" :data-level="entry.level">
-            [{{ entry.timestamp.slice(11, 19) }}] {{ entry.message }}
-          </p>
-          <p v-if="gatewayLogs.length === 0" class="muted">连接网关后，这里会展示实时消息和日志。</p>
-        </div>
-      </article>
-
-      <article class="panel-card">
-        <header class="card-head">
-          <h3>当前状态</h3>
-          <Tag severity="contrast" rounded>{{ appStore.connectionLabel }}</Tag>
-        </header>
-        <ul class="task-list">
-          <li>项目导入：已完成</li>
-          <li>环境配置：已完成</li>
-          <li>网关连接：{{ appStore.connectionLabel }}</li>
-          <li>当前阶段：{{ gatewayStage }}</li>
-        </ul>
-        <p class="muted-paragraph">{{ gatewayStageDescription }}</p>
-      </article>
     </section>
+
+    <Menu ref="deployMenu" :model="quickDeployMenuItems" popup class="quick-deploy-menu" />
+
+    <Dialog
+      v-model:visible="isProjectDeleteDialogVisible"
+      modal
+      class="project-delete-dialog"
+      :style="{ width: 'min(420px, calc(100vw - 32px))' }"
+    >
+      <template #header>
+        <div class="project-delete-dialog-header">
+          <div class="project-delete-dialog-icon">
+            <TriangleAlert class="h-4 w-4" aria-hidden="true" />
+          </div>
+          <div class="project-delete-dialog-copy">
+            <strong>确认删除项目</strong>
+            <p>删除后只会移除应用里的项目记录，不会删除你的本地源码目录。</p>
+          </div>
+        </div>
+      </template>
+
+      <div class="project-delete-dialog-body">
+        <div class="project-delete-target">
+          <span>即将删除</span>
+          <strong>{{ projectPendingDelete?.name || '当前项目' }}</strong>
+          <code v-if="projectPendingDelete?.localPath">{{ projectPendingDelete.localPath }}</code>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="project-delete-dialog-footer">
+          <Button
+            label="取消"
+            severity="secondary"
+            outlined
+            @click="closeProjectDeleteDialog"
+          />
+          <Button
+            label="删除"
+            severity="danger"
+            @click="confirmProjectDelete"
+          />
+        </div>
+      </template>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="isQuickDeployDialogVisible"
+      modal
+      :closable="quickDeployStage !== 'running'"
+      :dismissable-mask="quickDeployStage !== 'running'"
+      :close-on-escape="quickDeployStage !== 'running'"
+      class="quick-deploy-dialog"
+      :style="{ width: 'min(560px, calc(100vw - 32px))' }"
+      @hide="handleCloseQuickDeployDialog"
+    >
+      <template #header>
+        <div class="quick-deploy-dialog-header">
+          <div>
+            <strong>一键部署确认</strong>
+            <p>{{ quickDeployDialogTitle }}</p>
+          </div>
+          <Badge
+            :variant="resolveBadgeVariant(quickDeployStatusSeverity)"
+            :class="['rounded-full', resolveBadgeToneClass(quickDeployStatusSeverity)]"
+          >
+            {{ quickDeployStatusLabel }}
+          </Badge>
+        </div>
+      </template>
+
+      <div class="quick-deploy-dialog-body">
+        <div class="quick-deploy-summary-grid">
+          <article class="quick-deploy-summary-item">
+            <span>项目</span>
+            <strong>{{ quickDeploySelectedProject?.name || '--' }}</strong>
+          </article>
+          <article class="quick-deploy-summary-item">
+            <span>环境</span>
+            <strong>{{ quickDeploySelectedEnvironmentLabel }}</strong>
+          </article>
+          <article class="quick-deploy-summary-item">
+            <span>部署服务器</span>
+            <strong>{{ quickDeploySelectedServerLabel }}</strong>
+          </article>
+          <article class="quick-deploy-summary-item">
+            <span>部署策略</span>
+            <strong>{{ quickDeploySelectedStrategyLabel }}</strong>
+          </article>
+        </div>
+
+        <article class="quick-deploy-path-card">
+          <span>远端部署目录</span>
+          <code>{{ quickDeploySelectedRemotePath }}</code>
+        </article>
+
+        <Alert
+          v-if="quickDeployStage === 'confirm'"
+          :variant="resolveAlertVariant('info')"
+          :class="resolveAlertToneClass('info')"
+        >
+          将使用当前项目的默认打包命令与产物目录执行构建，然后部署到所选环境。
+        </Alert>
+
+        <Alert
+          v-else-if="quickDeployStage === 'success'"
+          :variant="resolveAlertVariant('success')"
+          :class="resolveAlertToneClass('success')"
+        >
+          {{ quickDeployMessage }}
+        </Alert>
+
+        <Alert
+          v-else-if="quickDeployStage === 'error'"
+          :variant="resolveAlertVariant('error')"
+          :class="resolveAlertToneClass('error')"
+        >
+          {{ quickDeployMessage }}
+        </Alert>
+
+        <article class="quick-deploy-log-card">
+          <header>
+            <span>部署进度</span>
+            <small>{{ quickDeployProgressLabel }}</small>
+          </header>
+          <div class="quick-deploy-log-stream">
+            <p v-for="entry in quickDeployLogs" :key="entry">{{ entry }}</p>
+            <p v-if="quickDeployLogs.length === 0" class="muted">确认后会在这里持续展示部署进度。</p>
+          </div>
+        </article>
+      </div>
+
+      <template #footer>
+        <div class="quick-deploy-dialog-footer">
+          <Button
+            v-if="quickDeployStage === 'confirm'"
+            label="取消"
+            severity="secondary"
+            text
+            @click="isQuickDeployDialogVisible = false"
+          />
+          <Button
+            v-if="quickDeployStage === 'confirm'"
+            class="app-primary-button"
+            label="确认部署"
+            :icon="Send"
+            @click="handleConfirmQuickDeploy"
+          />
+          <Button
+            v-else
+            label="关闭"
+            severity="secondary"
+            @click="isQuickDeployDialogVisible = false"
+          />
+        </div>
+      </template>
+    </Dialog>
   </AppShell>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import Tag from 'primevue/tag'
+import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
+import {
+  ArrowLeft,
+  ChevronRight,
+  FolderOpen,
+  Globe2,
+  Plus,
+  Send,
+  ShieldCheck,
+  Trash2,
+} from 'lucide-vue-next'
+
+import Alert from '@/components/ui/alert/Alert.vue'
+import Badge from '@/components/ui/badge/Badge.vue'
+import Button from '@/components/ui/button/Button.vue'
+import Dialog from '@/components/ui/dialog/Dialog.vue'
+import Menu from '@/components/ui/menu/Menu.vue'
+import projectFolderIcon from '@/assets/images/folder.png'
 
 import EnvironmentConfigPanel from '@/components/EnvironmentConfigPanel.vue'
 import ExecutionPanel from '@/components/ExecutionPanel.vue'
@@ -161,12 +437,22 @@ import GatewayPanel from '@/components/GatewayPanel.vue'
 import ProjectConfigPanel from '@/components/ProjectConfigPanel.vue'
 import ProjectOverviewCard from '@/components/ProjectOverviewCard.vue'
 import ServerConfigPanel from '@/components/ServerConfigPanel.vue'
+import TaskHistoryPanel from '@/components/TaskHistoryPanel.vue'
 import AppShell from '@/layouts/AppShell.vue'
+import { resolveAlertToneClass, resolveAlertVariant, resolveBadgeToneClass, resolveBadgeVariant } from '@/lib/ui-status'
 import { runLocalBuild } from '@/services/execution/build'
-import { runLocalDeployFallback } from '@/services/execution/deploy-fallback'
-import { runGatewayDeploy } from '@/services/execution/deploy'
+import { runServerConnectionCheck } from '@/services/execution/connection-check'
+import { runLocalDeploy } from '@/services/execution/deploy-local'
 import { loadLocalOpenClawGatewayConfig } from '@/services/openclaw/config'
-import { getProjectEnvironments, upsertEnvironment } from '@/services/project/environment-repository'
+import { requestProjectAiRecommendation } from '@/services/openclaw/project-ai'
+import {
+  PRESET_ENVIRONMENTS,
+  createEnvironmentRecordDraft,
+  deleteEnvironment,
+  getEnvironmentsByProjectIds,
+  getProjectEnvironments,
+  upsertEnvironment,
+} from '@/services/project/environment-repository'
 import { pickProjectDirectory } from '@/services/project/pick'
 import {
   deleteProject,
@@ -175,9 +461,11 @@ import {
   updateProjectConfig,
   upsertProject,
 } from '@/services/project/repository'
-import { scanProject } from '@/services/project/scan'
-import { getServers, upsertServer } from '@/services/server/repository'
+import { scanProject, scanProjectAiContext } from '@/services/project/scan'
+import { deleteServer, getServers, upsertServer } from '@/services/server/repository'
 import { loadGatewayConfig, saveGatewayConfig } from '@/services/storage/gateway'
+import { appendTaskHistory, getTaskHistory } from '@/services/task-history/repository'
+import { useConfirm } from '@/services/ui/confirm'
 import { showToast } from '@/services/ui/toast'
 import { GatewayClient } from '@/services/websocket/client'
 import { probeGateway } from '@/services/websocket/probe'
@@ -190,24 +478,40 @@ import type {
   ExecutionDraft,
   ExecutionStatus,
   ExecutionSummaryItem,
+  ProjectAiRecommendation,
   ProjectRecord,
   ServerFormValue,
   ServerRecord,
+  TaskHistoryRecord,
+  UploadStrategy,
 } from '@/types/task'
 
 const appStore = useAppStore()
+const confirm = useConfirm()
 
 appStore.setConnectionStatus('disconnected')
 
 const projectPathInput = ref('')
+const projectOverviewCardRef = useTemplateRef<InstanceType<typeof ProjectOverviewCard> | null>('projectOverviewCardRef')
+const projectInsightHeight = ref<number | null>(null)
 const isImporting = ref(false)
 const importError = ref('')
 const projects = ref<ProjectRecord[]>([])
 const latestScannedProject = ref<ProjectRecord | null>(null)
 const selectedProjectId = ref<string | null>(null)
 const projectDraft = ref<ProjectRecord | null>(null)
+const projectAiRecommendation = ref<ProjectAiRecommendation | null>(null)
+const isAiAnalyzingProject = ref(false)
+const projectEnvironments = ref<DeployEnvironmentRecord[]>([])
+const projectEnvironmentsMap = ref<Map<string, DeployEnvironmentRecord[]>>(new Map())
 const environmentDraft = ref<EnvironmentFormValue | null>(null)
+const selectedEnvironmentName = ref<string | null>(null)
+const isEnvironmentEditorVisible = ref(false)
+const environmentEditorMode = ref<'create' | 'edit'>('edit')
 const servers = ref<ServerRecord[]>([])
+const taskHistoryRecords = ref<TaskHistoryRecord[]>([])
+const selectedTaskHistoryId = ref<string | null>(null)
+const isCreatingServer = ref(false)
 const selectedServerId = ref<string | null>(null)
 const serverDraft = ref<ServerFormValue>(createEmptyServerDraft())
 const executionDraft = ref<ExecutionDraft | null>(null)
@@ -223,16 +527,33 @@ const gatewayProbeSummary = ref('')
 const gatewayProbeStatus = ref<'idle' | 'success' | 'warn' | 'error'>('idle')
 const isImportingLocalConfig = ref(false)
 const isProbingGateway = ref(false)
+const openResponsesEnabled = ref(false)
 const reconnectCountdown = ref<number | null>(null)
 const isSavingGatewayConfig = ref(false)
+const deployMenu = ref()
+const projectPendingDeleteId = ref<string | null>(null)
+const isProjectDeleteDialogVisible = ref(false)
+const quickDeployProjectId = ref<string | null>(null)
+const quickDeployEnvironmentName = ref<string | null>(null)
+const isQuickDeployDialogVisible = ref(false)
+const quickDeployStage = ref<'confirm' | 'running' | 'success' | 'error'>('confirm')
+const quickDeployMessage = ref('')
+const quickDeployLogs = ref<string[]>([])
 let gatewayClient: GatewayClient | null = null
 let reconnectTimer: number | null = null
 let reconnectInterval: number | null = null
 let reconnectAttempts = 0
 let manualDisconnectRequested = false
 let shouldReconnectGateway = false
+let projectOverviewResizeObserver: ResizeObserver | null = null
 
 type GatewayConnectTrigger = 'manual' | 'startup' | 'reconnect'
+
+type QuickDeployEnvironmentOption = {
+  environment: DeployEnvironmentRecord
+  project: ProjectRecord
+  server: ServerRecord | null
+}
 
 function createLog(level: GatewayLogEntry['level'], message: string) {
   return {
@@ -249,6 +570,34 @@ function pushGatewayLog(level: GatewayLogEntry['level'], message: string) {
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error
+  }
+
+  if (isObjectRecord(error)) {
+    if (typeof error.message === 'string' && error.message.trim()) {
+      return error.message
+    }
+
+    if (typeof error.error === 'string' && error.error.trim()) {
+      return error.error
+    }
+
+    try {
+      return JSON.stringify(error)
+    } catch {
+      return fallback
+    }
+  }
+
+  return fallback
 }
 
 function summarizeGatewayMessage(message: GatewayMessage): { level: GatewayLogEntry['level']; text: string } | null {
@@ -367,6 +716,38 @@ function createExecutionDraft(project: ProjectRecord, environmentName = 'dev'): 
   }
 }
 
+function formatEnvironmentLabel(name: string) {
+  if (name === 'test') {
+    return '测试环境'
+  }
+
+  if (name === 'prod') {
+    return '生产环境'
+  }
+
+  return '自定义环境'
+}
+
+function formatUploadStrategyLabel(strategy: UploadStrategy) {
+  if (strategy === 'clear-and-upload') {
+    return '清空后上传'
+  }
+
+  return '直接覆盖'
+}
+
+function getEnvironmentIcon(name: string) {
+  if (name === 'test') {
+    return Globe2
+  }
+
+  if (name === 'prod') {
+    return ShieldCheck
+  }
+
+  return Compass
+}
+
 const projectSummaries = computed<ProjectSummary[]>(() =>
   projects.value.map((project) => ({
     id: project.id,
@@ -375,6 +756,194 @@ const projectSummaries = computed<ProjectSummary[]>(() =>
     type: project.projectType,
     updatedAt: project.updatedAt,
   })),
+)
+
+const quickDeployOptionsByProject = computed(() => {
+  const result = new Map<string, QuickDeployEnvironmentOption[]>()
+
+  projects.value.forEach((project) => {
+    const environments = projectEnvironmentsMap.value.get(project.id) ?? []
+    const available = environments
+      .filter((environment) => environment.enabled && (environment.name === 'test' || environment.name === 'prod'))
+      .map((environment) => ({
+        environment,
+        project,
+        server: servers.value.find((server) => server.id === environment.serverId) ?? null,
+      }))
+      .filter((item) => item.server && item.environment.remotePath.trim())
+
+    result.set(project.id, available)
+  })
+
+  return result
+})
+
+const quickDeployMenuItems = computed(() =>
+  (quickDeployProjectId.value ? quickDeployOptionsByProject.value.get(quickDeployProjectId.value) ?? [] : []).map((item) => ({
+    command: () => {
+      openQuickDeployDialog(item)
+    },
+    icon: item.environment.name === 'prod' ? ShieldCheck : Globe2,
+    label: `部署到${formatEnvironmentLabel(item.environment.name)}`,
+  })),
+)
+
+const quickDeploySelectedOption = computed<QuickDeployEnvironmentOption | null>(() => {
+  if (!quickDeployProjectId.value || !quickDeployEnvironmentName.value) {
+    return null
+  }
+
+  const options = quickDeployOptionsByProject.value.get(quickDeployProjectId.value) ?? []
+  return options.find((item) => item.environment.name === quickDeployEnvironmentName.value) ?? null
+})
+
+const projectPendingDelete = computed(() => {
+  if (!projectPendingDeleteId.value) {
+    return null
+  }
+
+  return projects.value.find((project) => project.id === projectPendingDeleteId.value) ?? null
+})
+
+const quickDeploySelectedProject = computed(() => quickDeploySelectedOption.value?.project ?? null)
+
+const quickDeploySelectedEnvironmentLabel = computed(() =>
+  quickDeploySelectedOption.value ? formatEnvironmentLabel(quickDeploySelectedOption.value.environment.name) : '--',
+)
+
+const quickDeploySelectedServerLabel = computed(() => {
+  const server = quickDeploySelectedOption.value?.server
+
+  if (!server) {
+    return '--'
+  }
+
+  return `${server.name} / ${server.host}:${server.port}`
+})
+
+const quickDeploySelectedStrategyLabel = computed(() =>
+  quickDeploySelectedOption.value ? formatUploadStrategyLabel(quickDeploySelectedOption.value.environment.uploadStrategy) : '--',
+)
+
+const quickDeploySelectedRemotePath = computed(() => quickDeploySelectedOption.value?.environment.remotePath?.trim() || '--')
+
+const quickDeployDialogTitle = computed(() => {
+  if (quickDeployStage.value === 'running') {
+    return '部署任务正在执行，窗口会持续展示实时进度。'
+  }
+
+  if (quickDeployStage.value === 'success') {
+    return '部署已完成，你可以查看结果后手动关闭当前窗口。'
+  }
+
+  if (quickDeployStage.value === 'error') {
+    return '部署已结束，请根据结果信息确认是否需要调整配置。'
+  }
+
+  return '请确认本次部署的目标环境与策略。'
+})
+
+const quickDeployStatusLabel = computed(() => {
+  if (quickDeployStage.value === 'running') {
+    return '部署中'
+  }
+
+  if (quickDeployStage.value === 'success') {
+    return '部署成功'
+  }
+
+  if (quickDeployStage.value === 'error') {
+    return '部署失败'
+  }
+
+  return '待确认'
+})
+
+const quickDeployStatusSeverity = computed(() => {
+  if (quickDeployStage.value === 'running') {
+    return 'warn'
+  }
+
+  if (quickDeployStage.value === 'success') {
+    return 'success'
+  }
+
+  if (quickDeployStage.value === 'error') {
+    return 'danger'
+  }
+
+  return 'secondary'
+})
+
+const quickDeployProgressLabel = computed(() => {
+  if (quickDeployStage.value === 'running') {
+    return '执行中'
+  }
+
+  if (quickDeployStage.value === 'success') {
+    return '已完成'
+  }
+
+  if (quickDeployStage.value === 'error') {
+    return '已失败'
+  }
+
+  return '等待开始'
+})
+
+const environmentCards = computed(() => {
+  const cards = [...PRESET_ENVIRONMENTS].map((name) => {
+    const matched = projectEnvironments.value.find((environment) => environment.name === name) ?? null
+    const server = matched ? servers.value.find((item) => item.id === matched.serverId) ?? null : null
+
+    return {
+      configured: Boolean(matched),
+      deletable: false,
+      icon: getEnvironmentIcon(name),
+      label: formatEnvironmentLabel(name),
+      name,
+      preset: true,
+      remotePathLabel: matched?.remotePath?.trim() || '还没有设置部署目录',
+      serverLabel: server ? `${server.name} / ${server.host}:${server.port}` : '还没有绑定服务器',
+    }
+  })
+
+  const customCards = projectEnvironments.value
+    .filter((environment) => !PRESET_ENVIRONMENTS.includes(environment.name as (typeof PRESET_ENVIRONMENTS)[number]))
+    .map((environment) => {
+      const server = servers.value.find((item) => item.id === environment.serverId) ?? null
+
+      return {
+        configured: true,
+        deletable: true,
+        icon: getEnvironmentIcon(environment.name),
+        label: environment.name,
+        name: environment.name,
+        preset: false,
+        remotePathLabel: environment.remotePath?.trim() || '还没有设置部署目录',
+        serverLabel: server ? `${server.name} / ${server.host}:${server.port}` : '还没有绑定服务器',
+      }
+    })
+
+  return [...cards, ...customCards]
+})
+
+const executionEnvironmentOptions = computed(() => {
+  const configuredOptions = projectEnvironments.value.map((environment) => ({
+    label: environment.name,
+    value: environment.name,
+  }))
+
+  const fallbackOptions = PRESET_ENVIRONMENTS.map((name) => ({
+    label: name,
+    value: name,
+  }))
+
+  return configuredOptions.length > 0 ? configuredOptions : fallbackOptions
+})
+
+const isPresetEnvironment = computed(() =>
+  environmentDraft.value ? PRESET_ENVIRONMENTS.includes(environmentDraft.value.name as (typeof PRESET_ENVIRONMENTS)[number]) : false,
 )
 
 const gatewayConnectionLabel = computed(() => {
@@ -391,7 +960,7 @@ const gatewayConnectionLabel = computed(() => {
 
 const gatewayStageDescription = computed(() => {
   if (appStore.connectionStatus === 'connected') {
-    return '网关连接和认证都已完成，可以继续联调执行链路。'
+    return '网关连接和认证都已完成，可以继续使用 AI 判断、日志分析等辅助能力。'
   }
 
   if (appStore.connectionStatus === 'connecting') {
@@ -402,7 +971,7 @@ const gatewayStageDescription = computed(() => {
     return `网关连接已断开，系统会在 ${reconnectCountdown.value} 秒后自动重连。`
   }
 
-  return '当前还没有可用的网关连接，后续打包、部署、日志回传都无法执行。'
+  return '当前还没有可用的网关连接，AI 判断、日志分析等辅助能力暂不可用，但本地打包和部署主流程不受影响。'
 })
 
 const executionSummary = computed<ExecutionSummaryItem[]>(() => {
@@ -430,6 +999,27 @@ const executionSummary = computed<ExecutionSummaryItem[]>(() => {
   ]
 })
 
+const projectScriptCardStyle = computed(() => {
+  if (!projectInsightHeight.value) {
+    return undefined
+  }
+
+  return {
+    height: `${projectInsightHeight.value}px`,
+  }
+})
+
+function syncProjectInsightHeight() {
+  const element = projectOverviewCardRef.value?.overviewCardRef ?? null
+
+  if (!element) {
+    projectInsightHeight.value = null
+    return
+  }
+
+  projectInsightHeight.value = Math.ceil(element.getBoundingClientRect().height)
+}
+
 const canRunExecution = computed(() => {
   if (!latestScannedProject.value || !executionDraft.value) {
     return false
@@ -445,6 +1035,23 @@ const canRunExecution = computed(() => {
 
   return false
 })
+
+function formatProjectUpdatedAt(value?: string) {
+  if (!value) {
+    return '最近导入'
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return '最近导入'
+  }
+
+  return date.toLocaleDateString('zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+  })
+}
 
 function getSelectedEnvironmentConfig() {
   if (!environmentDraft.value || !executionDraft.value) {
@@ -463,8 +1070,12 @@ function validateDeployContext() {
     return { ok: false as const, message: '当前没有可执行的项目任务' }
   }
 
-  if (appStore.connectionStatus !== 'connected' || !gatewayClient) {
-    return { ok: false as const, message: '部署前必须先连接 OpenClaw 网关' }
+  if (executionDraft.value.mode === 'deploy') {
+    const outputPath = `${latestScannedProject.value.localPath}/${executionDraft.value.overrideOutputDir}`.trim()
+
+    if (!outputPath) {
+      return { ok: false as const, message: '仅部署模式下，本地产物目录不能为空' }
+    }
   }
 
   const environmentConfig = getSelectedEnvironmentConfig()
@@ -504,25 +1115,45 @@ function validateDeployContext() {
 
 async function refreshProjects() {
   projects.value = await getProjects()
+  await refreshProjectEnvironmentMap()
 
   if (projects.value.length > 0) {
-    const selected =
-      projects.value.find((project) => project.id === selectedProjectId.value) ?? projects.value[0]
+    const selected = selectedProjectId.value
+      ? projects.value.find((project) => project.id === selectedProjectId.value) ?? null
+      : null
 
-    selectedProjectId.value = selected.id
+    selectedProjectId.value = selected?.id ?? null
     latestScannedProject.value = selected
-    projectDraft.value = { ...selected }
-    executionDraft.value = createExecutionDraft(selected)
-    appStore.setSelectedProjectName(selected.name)
+    projectDraft.value = selected ? { ...selected } : null
+    projectAiRecommendation.value = null
+    executionDraft.value = selected ? createExecutionDraft(selected) : null
+    appStore.setSelectedProjectName(selected?.name ?? '项目')
     appStore.setBannerMessage(`已载入 ${projects.value.length} 个项目记录`)
-    projectPathInput.value = selected.localPath
-    await loadEnvironmentDraft(selected.id)
+    projectPathInput.value = selected?.localPath ?? ''
+
+    if (selected) {
+      await loadEnvironmentDraft(selected.id)
+      await refreshTaskHistory(selected.id)
+    } else {
+      projectEnvironments.value = []
+      environmentDraft.value = null
+      selectedEnvironmentName.value = null
+      isEnvironmentEditorVisible.value = false
+      taskHistoryRecords.value = []
+      selectedTaskHistoryId.value = null
+    }
   } else {
     selectedProjectId.value = null
     latestScannedProject.value = null
     projectDraft.value = null
+    projectAiRecommendation.value = null
+    projectEnvironments.value = []
     environmentDraft.value = null
+    selectedEnvironmentName.value = null
+    isEnvironmentEditorVisible.value = false
     executionDraft.value = null
+    taskHistoryRecords.value = []
+    selectedTaskHistoryId.value = null
     projectPathInput.value = ''
     appStore.setSelectedProjectName('未选择项目')
     appStore.setBannerMessage('等待导入项目')
@@ -551,18 +1182,35 @@ async function refreshServers(preferredServerId?: string | null) {
   serverDraft.value = createEmptyServerDraft()
 }
 
+async function refreshTaskHistory(projectId?: string | null) {
+  taskHistoryRecords.value = await getTaskHistory(projectId)
+  selectedTaskHistoryId.value = taskHistoryRecords.value[0]?.id ?? null
+}
+
+async function refreshProjectEnvironmentMap() {
+  projectEnvironmentsMap.value = await getEnvironmentsByProjectIds(projects.value.map((project) => project.id))
+}
+
+async function refreshProjectEnvironments(projectId: string) {
+  projectEnvironments.value = await getProjectEnvironments(projectId)
+  projectEnvironmentsMap.value = new Map(projectEnvironmentsMap.value)
+  projectEnvironmentsMap.value.set(projectId, [...projectEnvironments.value])
+}
+
 async function loadEnvironmentDraft(projectId: string) {
-  const environments = await getProjectEnvironments(projectId)
+  await refreshProjectEnvironments(projectId)
   const currentProject = projects.value.find((project) => project.id === projectId) ?? latestScannedProject.value
   const preferredName = executionDraft.value?.environmentName ?? 'dev'
   const selectedEnvironment =
-    environments.find((environment) => environment.name === preferredName) ??
-    environments.find((environment) => environment.name === 'dev') ??
+    projectEnvironments.value.find((environment) => environment.name === preferredName) ??
+    projectEnvironments.value.find((environment) => environment.name === 'test') ??
+    projectEnvironments.value.find((environment) => environment.name === 'prod') ??
     null
 
+  selectedEnvironmentName.value = selectedEnvironment?.name ?? preferredName
   environmentDraft.value = selectedEnvironment
     ? toEnvironmentDraft(selectedEnvironment)
-    : createEmptyEnvironmentDraft(preferredName as 'dev' | 'test' | 'prod')
+    : createEnvironmentRecordDraft(preferredName)
 
   if (
     environmentDraft.value &&
@@ -585,23 +1233,13 @@ async function handleImport() {
     const scanResult = await scanProject(projectPathInput.value)
     const project = await upsertProject(scanResult)
 
-    await refreshProjects()
     selectedProjectId.value = project.id
-    latestScannedProject.value = project
-    projectDraft.value = { ...project }
-    executionDraft.value = createExecutionDraft(project)
-    appStore.setSelectedProjectName(project.name)
+    await refreshProjects()
     appStore.setBannerMessage(
       `已识别 ${project.projectType} 项目，默认打包命令：${project.defaultBuildCommand || '未识别'}`,
     )
-    projectPathInput.value = project.localPath
   } catch (error) {
-    importError.value =
-      error instanceof Error
-        ? error.message
-        : typeof error === 'string'
-          ? error
-          : JSON.stringify(error)
+    importError.value = getErrorMessage(error, '项目导入失败')
     appStore.setBannerMessage('项目导入失败，请检查路径和 package.json')
   } finally {
     isImporting.value = false
@@ -619,12 +1257,7 @@ async function handlePickDirectory() {
     projectPathInput.value = selectedPath
     await handleImport()
   } catch (error) {
-    importError.value =
-      error instanceof Error
-        ? error.message
-        : typeof error === 'string'
-          ? error
-          : JSON.stringify(error)
+    importError.value = getErrorMessage(error, '目录选择失败')
     appStore.setBannerMessage('目录选择失败')
   }
 }
@@ -639,6 +1272,7 @@ async function handleSelectProject(projectId: string) {
   selectedProjectId.value = projectId
   latestScannedProject.value = selected
   projectDraft.value = { ...selected }
+  projectAiRecommendation.value = null
   executionDraft.value = createExecutionDraft(selected, environmentDraft.value?.name ?? 'dev')
   projectPathInput.value = selected.localPath
   appStore.setSelectedProjectName(selected.name)
@@ -647,10 +1281,12 @@ async function handleSelectProject(projectId: string) {
   projects.value = await markProjectAsUsed(projectId)
   latestScannedProject.value = projects.value.find((project) => project.id === projectId) ?? selected
   projectDraft.value = latestScannedProject.value ? { ...latestScannedProject.value } : null
+  projectAiRecommendation.value = null
   executionDraft.value = latestScannedProject.value
     ? createExecutionDraft(latestScannedProject.value, environmentDraft.value?.name ?? 'dev')
     : null
   await loadEnvironmentDraft(projectId)
+  await refreshTaskHistory(projectId)
 }
 
 async function syncEnvironmentByName(environmentName: string) {
@@ -658,14 +1294,15 @@ async function syncEnvironmentByName(environmentName: string) {
     return
   }
 
-  const environments = await getProjectEnvironments(selectedProjectId.value)
-  const matchedEnvironment = environments.find((environment) => environment.name === environmentName) ?? null
+  await refreshProjectEnvironments(selectedProjectId.value)
+  const matchedEnvironment = projectEnvironments.value.find((environment) => environment.name === environmentName) ?? null
   const currentProject =
     projects.value.find((project) => project.id === selectedProjectId.value) ?? latestScannedProject.value
 
+  selectedEnvironmentName.value = environmentName
   environmentDraft.value = matchedEnvironment
     ? toEnvironmentDraft(matchedEnvironment)
-    : createEmptyEnvironmentDraft(environmentName as 'dev' | 'test' | 'prod')
+    : createEnvironmentRecordDraft(environmentName)
 
   if (
     environmentDraft.value &&
@@ -673,6 +1310,276 @@ async function syncEnvironmentByName(environmentName: string) {
     currentProject?.defaultDeployServerIdByEnv?.[environmentDraft.value.name]
   ) {
     environmentDraft.value.serverId = currentProject.defaultDeployServerIdByEnv[environmentDraft.value.name] ?? ''
+  }
+}
+
+function handleCreateEnvironment() {
+  environmentEditorMode.value = 'create'
+  selectedEnvironmentName.value = null
+  environmentDraft.value = createEnvironmentRecordDraft('')
+  isEnvironmentEditorVisible.value = true
+  appStore.setBannerMessage('已打开新增环境面板')
+}
+
+async function handleSelectEnvironment(name: string) {
+  if (!selectedProjectId.value) {
+    return
+  }
+
+  environmentEditorMode.value = 'edit'
+  selectedEnvironmentName.value = name
+  await syncEnvironmentByName(name)
+  isEnvironmentEditorVisible.value = true
+  appStore.setBannerMessage(`已载入环境：${name}`)
+}
+
+function handleCloseEnvironmentEditor() {
+  isEnvironmentEditorVisible.value = false
+  environmentEditorMode.value = 'edit'
+  appStore.setBannerMessage('已关闭环境编辑面板')
+}
+
+function handleResetEnvironmentDraft() {
+  if (!environmentDraft.value) {
+    return
+  }
+
+  environmentDraft.value = {
+    ...environmentDraft.value,
+    name: '',
+    serverId: '',
+    remotePath: '',
+    uploadStrategy: 'overwrite',
+    postDeployCommand: '',
+    enabled: false,
+  }
+
+  appStore.setBannerMessage('已清空当前环境表单')
+  showToast('当前环境配置已重置', 'success')
+}
+
+function hasQuickDeployOptions(projectId: string) {
+  return (quickDeployOptionsByProject.value.get(projectId) ?? []).length > 0
+}
+
+function pushQuickDeployLog(message: string) {
+  const timestamp = new Date().toLocaleTimeString('zh-CN', {
+    hour12: false,
+  })
+  quickDeployLogs.value = [...quickDeployLogs.value, `[${timestamp}] ${message}`]
+}
+
+function resetQuickDeployState() {
+  quickDeployProjectId.value = null
+  quickDeployEnvironmentName.value = null
+  quickDeployStage.value = 'confirm'
+  quickDeployMessage.value = ''
+  quickDeployLogs.value = []
+}
+
+function toggleQuickDeployMenu(event: Event, projectId: string) {
+  if (!hasQuickDeployOptions(projectId)) {
+    return
+  }
+
+  quickDeployProjectId.value = projectId
+  deployMenu.value?.toggle(event)
+}
+
+function openQuickDeployDialog(option: QuickDeployEnvironmentOption) {
+  quickDeployProjectId.value = option.project.id
+  quickDeployEnvironmentName.value = option.environment.name
+  quickDeployStage.value = 'confirm'
+  quickDeployMessage.value = ''
+  quickDeployLogs.value = []
+  isQuickDeployDialogVisible.value = true
+}
+
+function handleCloseQuickDeployDialog() {
+  if (quickDeployStage.value === 'running') {
+    isQuickDeployDialogVisible.value = true
+    return
+  }
+
+  resetQuickDeployState()
+}
+
+async function handleConfirmQuickDeploy() {
+  const option = quickDeploySelectedOption.value
+
+  if (!option) {
+    showToast('当前项目没有可用的测试环境或生产环境配置', 'warning')
+    isQuickDeployDialogVisible.value = false
+    return
+  }
+
+  if (!option.project.defaultBuildCommand.trim()) {
+    quickDeployStage.value = 'error'
+    quickDeployMessage.value = '当前项目缺少默认打包命令，请先在项目配置中保存后再执行一键部署。'
+    pushQuickDeployLog(quickDeployMessage.value)
+    showToast(quickDeployMessage.value, 'warning')
+    return
+  }
+
+  if (!option.project.defaultOutputDir.trim()) {
+    quickDeployStage.value = 'error'
+    quickDeployMessage.value = '当前项目缺少默认产物目录，请先在项目配置中保存后再执行一键部署。'
+    pushQuickDeployLog(quickDeployMessage.value)
+    showToast(quickDeployMessage.value, 'warning')
+    return
+  }
+
+  if (!option.server) {
+    quickDeployStage.value = 'error'
+    quickDeployMessage.value = '当前环境绑定的服务器不存在，请先重新保存环境配置。'
+    pushQuickDeployLog(quickDeployMessage.value)
+    showToast(quickDeployMessage.value, 'error')
+    return
+  }
+
+  if (option.server.authType === 'password' && !option.server.password.trim()) {
+    quickDeployStage.value = 'error'
+    quickDeployMessage.value = '当前服务器使用密码认证，但密码为空。'
+    pushQuickDeployLog(quickDeployMessage.value)
+    showToast(quickDeployMessage.value, 'error')
+    return
+  }
+
+  if (option.server.authType === 'privateKey' && !option.server.privateKeyPath.trim()) {
+    quickDeployStage.value = 'error'
+    quickDeployMessage.value = '当前服务器使用私钥认证，但私钥路径为空。'
+    pushQuickDeployLog(quickDeployMessage.value)
+    showToast(quickDeployMessage.value, 'error')
+    return
+  }
+
+  const startedAt = new Date().toISOString()
+  const logStartCount = gatewayLogs.value.length
+  let buildOutputPath = `${option.project.localPath}/${option.project.defaultOutputDir}`
+  let historySummary = ''
+  let historyErrorMessage = ''
+
+  quickDeployStage.value = 'running'
+  quickDeployMessage.value = '部署任务正在执行，请稍候。'
+  quickDeployLogs.value = []
+
+  pushQuickDeployLog(`准备部署项目 ${option.project.name}`)
+  pushQuickDeployLog(`目标环境：${formatEnvironmentLabel(option.environment.name)}`)
+  pushQuickDeployLog(`部署策略：${formatUploadStrategyLabel(option.environment.uploadStrategy)}`)
+  pushQuickDeployLog(`目标目录：${option.environment.remotePath}`)
+
+  pushGatewayLog('info', `开始一键部署：${option.project.name} -> ${formatEnvironmentLabel(option.environment.name)}`)
+
+  try {
+    const buildResult = await runLocalBuild({
+      projectPath: option.project.localPath,
+      buildCommand: option.project.defaultBuildCommand,
+      outputDir: option.project.defaultOutputDir,
+      precheckCommand: option.project.defaultPrecheckCommand,
+      runPrecheck: option.project.defaultPrecheckEnabled,
+    })
+
+    if (buildResult.precheckRan) {
+      pushQuickDeployLog(buildResult.precheckSuccess ? '前置校验执行成功' : '前置校验执行失败')
+      pushGatewayLog(buildResult.precheckSuccess ? 'success' : 'error', buildResult.precheckSuccess ? '前置校验执行成功' : '前置校验执行失败')
+
+      if (buildResult.precheckOutput.trim()) {
+        pushQuickDeployLog(buildResult.precheckOutput.trim())
+        pushGatewayLog(buildResult.precheckSuccess ? 'info' : 'error', buildResult.precheckOutput.trim())
+      }
+    }
+
+    if (!buildResult.success) {
+      throw new Error(buildResult.buildOutput.trim() || '本地打包执行失败')
+    }
+
+    buildOutputPath = buildResult.outputPath
+    pushQuickDeployLog(`本地打包完成：${buildResult.outputPath}`)
+    pushGatewayLog('success', `一键部署打包完成：${buildResult.outputPath}`)
+
+    if (buildResult.buildOutput.trim()) {
+      pushQuickDeployLog(buildResult.buildOutput.trim())
+      pushGatewayLog('info', buildResult.buildOutput.trim())
+    }
+
+    pushQuickDeployLog(`开始连接服务器：${option.server.host}:${option.server.port}`)
+    pushQuickDeployLog(`远端部署目录：${option.environment.remotePath}`)
+    pushQuickDeployLog('部署任务已提交到桌面端后台线程执行。')
+
+    const deployResult = await runLocalDeploy({
+      environmentName: option.environment.name,
+      outputPath: buildOutputPath,
+      postDeployCommand: option.environment.postDeployCommand,
+      projectName: option.project.name,
+      remotePath: option.environment.remotePath,
+      server: option.server,
+      uploadStrategy: option.environment.uploadStrategy,
+    })
+
+    deployResult.steps.forEach((step) => {
+      pushQuickDeployLog(step)
+      pushGatewayLog('info', step)
+    })
+
+    if (!deployResult.success) {
+      throw new Error(deployResult.errorMessage || deployResult.commandOutput || '远端部署执行失败')
+    }
+
+    if (deployResult.commandOutput.trim()) {
+      pushQuickDeployLog(deployResult.commandOutput.trim())
+      pushGatewayLog('info', deployResult.commandOutput.trim())
+    }
+
+    historySummary = `一键部署成功，已发布到${formatEnvironmentLabel(option.environment.name)}`
+    quickDeployStage.value = 'success'
+    quickDeployMessage.value = `${option.project.name} 已成功部署到${formatEnvironmentLabel(option.environment.name)}。`
+    pushQuickDeployLog(quickDeployMessage.value)
+    pushGatewayLog('success', quickDeployMessage.value)
+    appStore.setBannerMessage(quickDeployMessage.value)
+    showToast('一键部署成功', 'success')
+  } catch (error) {
+    const message = getErrorMessage(error, '一键部署失败')
+    historySummary = `一键部署失败，目标环境 ${formatEnvironmentLabel(option.environment.name)}`
+    historyErrorMessage = message
+    quickDeployStage.value = 'error'
+    quickDeployMessage.value = message
+    pushQuickDeployLog(message)
+    pushGatewayLog('error', message)
+    appStore.setBannerMessage(message)
+    showToast(message, 'error')
+  } finally {
+    const finishedAt = new Date().toISOString()
+    const newLogs = gatewayLogs.value
+      .slice(0, Math.max(gatewayLogs.value.length - logStartCount, 0))
+      .map((entry) => `[${entry.timestamp.slice(11, 19)}] ${entry.message}`)
+      .reverse()
+
+    const historyRecord: TaskHistoryRecord = {
+      id: crypto.randomUUID(),
+      projectId: option.project.id,
+      projectName: option.project.name,
+      environmentName: option.environment.name,
+      mode: 'build-and-deploy',
+      status: quickDeployStage.value === 'success' ? 'success' : 'error',
+      buildCommand: option.project.defaultBuildCommand,
+      outputDir: option.project.defaultOutputDir,
+      outputPath: buildOutputPath,
+      serverName: option.server.name,
+      serverHost: `${option.server.host}:${option.server.port}`,
+      remotePath: option.environment.remotePath,
+      startedAt,
+      finishedAt,
+      durationMs: Math.max(new Date(finishedAt).getTime() - new Date(startedAt).getTime(), 0),
+      summary: historySummary || (quickDeployStage.value === 'success' ? '一键部署成功' : '一键部署失败'),
+      errorMessage: historyErrorMessage || undefined,
+      logs: [...quickDeployLogs.value, ...newLogs].slice(-200),
+    }
+
+    await appendTaskHistory(historyRecord)
+
+    if (selectedProjectId.value === option.project.id) {
+      await refreshTaskHistory(option.project.id)
+    }
   }
 }
 
@@ -692,6 +1599,44 @@ async function handleDeleteProject(projectId: string) {
   await refreshProjects()
 }
 
+function openProjectDeleteDialog(projectId: string) {
+  projectPendingDeleteId.value = projectId
+  isProjectDeleteDialogVisible.value = true
+}
+
+function closeProjectDeleteDialog() {
+  isProjectDeleteDialogVisible.value = false
+  projectPendingDeleteId.value = null
+}
+
+function confirmProjectDelete() {
+  const projectId = projectPendingDeleteId.value
+
+  if (!projectId) {
+    return
+  }
+
+  closeProjectDeleteDialog()
+  void handleDeleteProject(projectId)
+}
+
+function handleBackToProjectList() {
+  selectedProjectId.value = null
+  latestScannedProject.value = null
+  projectEnvironments.value = []
+  projectDraft.value = null
+  projectAiRecommendation.value = null
+  environmentDraft.value = null
+  selectedEnvironmentName.value = null
+  isEnvironmentEditorVisible.value = false
+  executionDraft.value = null
+  taskHistoryRecords.value = []
+  selectedTaskHistoryId.value = null
+  projectPathInput.value = ''
+  appStore.setSelectedProjectName('项目')
+  appStore.setBannerMessage('已返回项目列表')
+}
+
 async function handleSaveProjectConfig() {
   if (!projectDraft.value) {
     return
@@ -700,8 +1645,95 @@ async function handleSaveProjectConfig() {
   projects.value = await updateProjectConfig(projectDraft.value)
   latestScannedProject.value = projects.value.find((project) => project.id === projectDraft.value?.id) ?? null
   projectDraft.value = latestScannedProject.value ? { ...latestScannedProject.value } : null
+
+  if (latestScannedProject.value && executionDraft.value) {
+    executionDraft.value = {
+      ...executionDraft.value,
+      overrideBuildCommand: latestScannedProject.value.defaultBuildCommand,
+      overrideOutputDir: latestScannedProject.value.defaultOutputDir,
+      runPrecheck: latestScannedProject.value.defaultPrecheckEnabled,
+    }
+  }
+
   appStore.setBannerMessage(`已保存项目配置：${projectDraft.value?.name ?? ''}`)
   showToast('项目配置已保存', 'success')
+}
+
+async function handleRunProjectAiAnalysis() {
+  if (!latestScannedProject.value) {
+    showToast('请先导入并选中项目', 'warning')
+    return
+  }
+
+  if (!gatewayUrl.value.trim() || !gatewayToken.value.trim()) {
+    showToast('请先填写并保存 OpenClaw 网关地址和 Token，再执行 AI 判断', 'warning')
+    return
+  }
+
+  if (gatewayConfigSource.value === 'local-openclaw' && !openResponsesEnabled.value) {
+    showToast('当前 OpenClaw 未启用 OpenResponses 能力，AI 判断暂不可用。需要先在 OpenClaw 配置中开启该 HTTP 端点。', 'warning')
+    return
+  }
+
+  isAiAnalyzingProject.value = true
+  projectAiRecommendation.value = null
+  pushGatewayLog('info', `开始对项目 ${latestScannedProject.value.name} 执行 AI 判断`)
+
+  try {
+    const context = await scanProjectAiContext(latestScannedProject.value.localPath)
+    const recommendation = await requestProjectAiRecommendation({
+      context,
+      token: gatewayToken.value.trim(),
+      url: gatewayUrl.value.trim(),
+    })
+
+    projectAiRecommendation.value = recommendation
+    pushGatewayLog('success', 'AI 已返回项目构建建议')
+    pushGatewayLog(
+      'info',
+      `AI 建议：命令=${recommendation.recommendedBuildCommand || '未给出'}，目录=${recommendation.recommendedOutputDir || '未给出'}`,
+    )
+    appStore.setBannerMessage('AI 已返回项目构建建议')
+    showToast('AI 判断完成', 'success')
+  } catch (error) {
+    const rawMessage = getErrorMessage(
+      error,
+      'AI 判断失败，请确认 OpenClaw 网关已启用 /v1/responses，并且当前 Token 有调用权限',
+    )
+    const message = rawMessage.includes('HTTP 404')
+      ? '当前 OpenClaw Gateway 未暴露 /v1/responses 接口，所以 AI 判断不可用。请先在 OpenClaw 配置中启用 OpenResponses HTTP 端点，再重试。'
+      : rawMessage
+    pushGatewayLog('error', message)
+    appStore.setBannerMessage(message)
+    showToast(message, 'error')
+  } finally {
+    isAiAnalyzingProject.value = false
+  }
+}
+
+function handleApplyProjectAiRecommendation() {
+  if (!projectDraft.value || !projectAiRecommendation.value) {
+    return
+  }
+
+  const nextProjectDraft: ProjectRecord = {
+    ...projectDraft.value,
+    defaultBuildCommand: projectAiRecommendation.value.recommendedBuildCommand || projectDraft.value.defaultBuildCommand,
+    defaultOutputDir: projectAiRecommendation.value.recommendedOutputDir || projectDraft.value.defaultOutputDir,
+  }
+
+  projectDraft.value = nextProjectDraft
+
+  if (executionDraft.value) {
+    executionDraft.value = {
+      ...executionDraft.value,
+      overrideBuildCommand: nextProjectDraft.defaultBuildCommand,
+      overrideOutputDir: nextProjectDraft.defaultOutputDir,
+    }
+  }
+
+  appStore.setBannerMessage('已应用 AI 推荐值，请按需保存项目配置')
+  showToast('已应用 AI 推荐值', 'success')
 }
 
 async function handleSaveEnvironment() {
@@ -709,7 +1741,14 @@ async function handleSaveEnvironment() {
     return
   }
 
+  if (!environmentDraft.value.name.trim()) {
+    showToast('请先填写环境名称', 'warning')
+    return
+  }
+
   await upsertEnvironment(selectedProjectId.value, environmentDraft.value)
+  await refreshProjectEnvironments(selectedProjectId.value)
+  selectedEnvironmentName.value = environmentDraft.value.name
   const currentProject = projects.value.find((project) => project.id === selectedProjectId.value) ?? null
 
   if (currentProject) {
@@ -728,6 +1767,77 @@ async function handleSaveEnvironment() {
 
   appStore.setBannerMessage(`已保存 ${environmentDraft.value.name} 环境配置`)
   showToast(`${environmentDraft.value.name} 环境配置已保存`, 'success')
+  isEnvironmentEditorVisible.value = false
+  await refreshProjectEnvironmentMap()
+
+  if (executionDraft.value) {
+    executionDraft.value = {
+      ...executionDraft.value,
+      environmentName: environmentDraft.value.name,
+    }
+  }
+}
+
+async function handleDeleteEnvironment() {
+  if (!selectedProjectId.value || !environmentDraft.value?.name) {
+    return
+  }
+
+  const environmentName = environmentDraft.value.name
+  await deleteEnvironment(selectedProjectId.value, environmentName)
+  await refreshProjectEnvironments(selectedProjectId.value)
+
+  isEnvironmentEditorVisible.value = false
+  selectedEnvironmentName.value = null
+  environmentDraft.value = null
+
+  if (executionDraft.value?.environmentName === environmentName) {
+    const fallbackName = projectEnvironments.value[0]?.name ?? PRESET_ENVIRONMENTS[0]
+    executionDraft.value = {
+      ...executionDraft.value,
+      environmentName: fallbackName,
+    }
+    await syncEnvironmentByName(fallbackName)
+  }
+
+  appStore.setBannerMessage(`已删除环境：${environmentName}`)
+  showToast('环境已删除', 'success')
+  await refreshProjectEnvironmentMap()
+}
+
+function handleConfirmDeleteEnvironment() {
+  if (!environmentDraft.value?.name) {
+    return
+  }
+
+  const environmentName = environmentDraft.value.name
+  confirm.require({
+    message: `删除后将移除环境配置“${environmentName}”。这个操作不会删除服务器记录。`,
+    header: '确认删除环境',
+    icon: TriangleAlert,
+    rejectLabel: '取消',
+    acceptLabel: '删除',
+    acceptClass: 'p-button-danger',
+    accept: () => {
+      void handleDeleteEnvironment()
+    },
+  })
+}
+
+function handleConfirmDeleteEnvironmentByName(name: string) {
+  confirm.require({
+    message: `删除后将移除环境配置“${name}”。这个操作不会删除服务器记录。`,
+    header: '确认删除环境',
+    icon: TriangleAlert,
+    rejectLabel: '取消',
+    acceptLabel: '删除',
+    acceptClass: 'p-button-danger',
+    accept: () => {
+      selectedEnvironmentName.value = name
+      environmentDraft.value = createEnvironmentRecordDraft(name)
+      void handleDeleteEnvironment()
+    },
+  })
 }
 
 async function handleSaveServer() {
@@ -748,6 +1858,7 @@ async function handleSaveServer() {
 
   const savedServer = await upsertServer(serverDraft.value, selectedServerId.value)
   await refreshServers(savedServer.id)
+  isCreatingServer.value = false
 
   if (environmentDraft.value && !environmentDraft.value.serverId) {
     environmentDraft.value = {
@@ -756,14 +1867,31 @@ async function handleSaveServer() {
     }
   }
 
+  if (selectedProjectId.value) {
+    await refreshProjectEnvironments(selectedProjectId.value)
+  }
+
   appStore.setBannerMessage(`已保存服务器：${savedServer.name}`)
   showToast('服务器配置已保存', 'success')
 }
 
 function handleCreateServer() {
+  isCreatingServer.value = true
   selectedServerId.value = null
   serverDraft.value = createEmptyServerDraft()
   appStore.setBannerMessage('已切换到新建服务器模式')
+}
+
+function handleCloseCreateServer() {
+  isCreatingServer.value = false
+  serverDraft.value = createEmptyServerDraft()
+  appStore.setBannerMessage('已关闭新增服务器面板')
+}
+
+function handleBackToServerList() {
+  selectedServerId.value = null
+  serverDraft.value = createEmptyServerDraft()
+  appStore.setBannerMessage('已返回服务器列表')
 }
 
 function handleSelectServer(serverId: string) {
@@ -773,9 +1901,117 @@ function handleSelectServer(serverId: string) {
     return
   }
 
+  isCreatingServer.value = false
   selectedServerId.value = serverId
   serverDraft.value = toServerDraft(matchedServer)
   appStore.setBannerMessage(`已载入服务器：${matchedServer.name}`)
+}
+
+async function handleDeleteServer() {
+  if (!selectedServerId.value) {
+    return
+  }
+
+  const currentServer = servers.value.find((server) => server.id === selectedServerId.value) ?? null
+  servers.value = await deleteServer(selectedServerId.value)
+  isCreatingServer.value = false
+  selectedServerId.value = null
+  serverDraft.value = createEmptyServerDraft()
+
+  if (selectedProjectId.value) {
+    await refreshProjectEnvironments(selectedProjectId.value)
+  }
+
+  appStore.setBannerMessage(`已删除服务器：${currentServer?.name ?? ''}`)
+  showToast('服务器已删除', 'success')
+}
+
+async function handleCheckServer() {
+  if (!serverDraft.value.host.trim() || !serverDraft.value.username.trim()) {
+    showToast('请先填写服务器主机、用户名和认证信息', 'warning')
+    return
+  }
+
+  if (serverDraft.value.authType === 'password' && !serverDraft.value.password.trim()) {
+    showToast('密码认证模式下必须填写服务器密码', 'warning')
+    return
+  }
+
+  if (serverDraft.value.authType === 'privateKey' && !serverDraft.value.privateKeyPath.trim()) {
+    showToast('私钥认证模式下必须填写私钥路径', 'warning')
+    return
+  }
+
+  pushGatewayLog('info', `开始测试服务器连接：${serverDraft.value.host}:${serverDraft.value.port}`)
+
+  try {
+    const result = await runServerConnectionCheck({
+      authType: serverDraft.value.authType,
+      host: serverDraft.value.host,
+      password: serverDraft.value.password,
+      port: serverDraft.value.port,
+      privateKeyPath: serverDraft.value.privateKeyPath,
+      username: serverDraft.value.username,
+    })
+
+    result.steps.forEach((step) => pushGatewayLog('info', step))
+    pushGatewayLog('success', '服务器连接检测通过')
+    appStore.setBannerMessage('服务器连接检测通过')
+    showToast('服务器连接检测通过', 'success')
+  } catch (error) {
+    const message = getErrorMessage(error, '服务器连接检测失败')
+    pushGatewayLog('error', message)
+    appStore.setBannerMessage(message)
+    showToast(message, 'error')
+  }
+}
+
+async function handleCheckEnvironment() {
+  if (!environmentDraft.value) {
+    showToast('请先选择一个项目环境', 'warning')
+    return
+  }
+
+  if (!environmentDraft.value.serverId) {
+    showToast('请先为当前环境绑定服务器', 'warning')
+    return
+  }
+
+  if (!environmentDraft.value.remotePath.trim()) {
+    showToast('请先填写远端部署目录', 'warning')
+    return
+  }
+
+  const server = servers.value.find((item) => item.id === environmentDraft.value?.serverId) ?? null
+
+  if (!server) {
+    showToast('当前环境绑定的服务器不存在，请重新选择', 'error')
+    return
+  }
+
+  pushGatewayLog('info', `开始检测环境 ${environmentDraft.value.name} 的远端目录权限`)
+
+  try {
+    const result = await runServerConnectionCheck({
+      authType: server.authType,
+      host: server.host,
+      password: server.password,
+      port: server.port,
+      privateKeyPath: server.privateKeyPath,
+      remotePath: environmentDraft.value.remotePath,
+      username: server.username,
+    })
+
+    result.steps.forEach((step) => pushGatewayLog('info', step))
+    pushGatewayLog('success', `环境 ${environmentDraft.value.name} 连接与目录检测通过`)
+    appStore.setBannerMessage(`环境 ${environmentDraft.value.name} 检测通过`)
+    showToast(`环境 ${environmentDraft.value.name} 检测通过`, 'success')
+  } catch (error) {
+    const message = getErrorMessage(error, '环境连接检测失败')
+    pushGatewayLog('error', message)
+    appStore.setBannerMessage(message)
+    showToast(message, 'error')
+  }
 }
 
 async function handleRunExecution() {
@@ -784,6 +2020,14 @@ async function handleRunExecution() {
   }
 
   const mode = executionDraft.value.mode
+  const startedAt = new Date().toISOString()
+  const logStartCount = gatewayLogs.value.length
+  let buildOutputPath = `${latestScannedProject.value.localPath}/${executionDraft.value.overrideOutputDir}`
+  let historySummary = ''
+  let historyErrorMessage = ''
+  let historyServerName = ''
+  let historyServerHost = ''
+  let historyRemotePath = ''
 
   if (mode === 'deploy' || mode === 'build-and-deploy') {
     const validation = validateDeployContext()
@@ -812,8 +2056,6 @@ async function handleRunExecution() {
   pushGatewayLog('info', `已创建执行任务：${summary}`)
 
   try {
-    let buildOutputPath = latestScannedProject.value.localPath
-
     if (mode === 'build' || mode === 'build-and-deploy') {
       const result = await runLocalBuild({
         projectPath: latestScannedProject.value.localPath,
@@ -843,7 +2085,7 @@ async function handleRunExecution() {
         }
         appStore.setBannerMessage('本地打包执行失败')
         showToast('本地打包执行失败', 'error')
-        return
+        throw new Error(result.buildOutput.trim() || '本地打包执行失败')
       }
 
       buildOutputPath = result.outputPath
@@ -856,12 +2098,12 @@ async function handleRunExecution() {
     if (mode === 'deploy' || mode === 'build-and-deploy') {
       const validation = validateDeployContext()
 
-      if (!validation.ok || !gatewayClient) {
-        throw new Error(validation.ok ? 'OpenClaw 网关未就绪' : validation.message)
+      if (!validation.ok) {
+        throw new Error(validation.message)
       }
 
       executionStatusMessage.value =
-        mode === 'deploy' ? '正在通过 OpenClaw 执行远端部署...' : '本地打包完成，正在通过 OpenClaw 执行远端部署...'
+        mode === 'deploy' ? '正在执行远端部署...' : '本地打包完成，正在执行远端部署...'
 
       const deployContext = {
         environmentName: executionDraft.value.environmentName,
@@ -873,42 +2115,34 @@ async function handleRunExecution() {
         uploadStrategy: validation.environmentConfig.uploadStrategy,
       }
 
-      let deployResult
+      historyServerName = deployContext.server.name
+      historyServerHost = `${deployContext.server.host}:${deployContext.server.port}`
+      historyRemotePath = deployContext.remotePath
 
-      try {
-        deployResult = await runGatewayDeploy(gatewayClient, deployContext)
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'OpenClaw 远端部署失败'
+      pushGatewayLog('info', `开始连接服务器：${deployContext.server.host}:${deployContext.server.port}`)
+      pushGatewayLog('info', `认证方式：${deployContext.server.authType === 'password' ? '密码认证' : '私钥认证'}`)
+      pushGatewayLog('info', `目标远端目录：${deployContext.remotePath}`)
+      pushGatewayLog('info', '部署任务已提交到桌面端后台线程执行，界面保持可操作。')
 
-        if (message.includes('missing scope: operator.write')) {
-          if (validation.server.authType !== 'privateKey') {
-            throw new Error('当前网关 token 缺少 operator.write，且桌面端 SSH 兜底仅支持私钥认证。请把服务器改为私钥认证，或更换具备写权限的 Gateway Token。')
-          }
+      const deployResult = await runLocalDeploy(deployContext)
 
-          pushGatewayLog('warn', '当前网关 token 缺少 operator.write，已自动切换到桌面端 SSH 部署兜底')
-          const fallbackResult = await runLocalDeployFallback(deployContext)
-
-          if (!fallbackResult.success) {
-            throw new Error('桌面端 SSH 部署兜底失败')
-          }
-
-          if (fallbackResult.commandOutput.trim()) {
-            pushGatewayLog('info', fallbackResult.commandOutput.trim())
-          }
-
-          deployResult = {
-            fallbackUsed: true,
-            steps: fallbackResult.steps,
-            success: true,
-          }
-        } else {
-          throw error
-        }
+      if (!deployResult.success) {
+        throw new Error(deployResult.errorMessage || deployResult.commandOutput || '远端部署执行失败')
       }
 
       deployResult.steps.forEach((step) => pushGatewayLog('info', step))
-      pushGatewayLog('success', deployResult.fallbackUsed ? '远端部署执行完成（桌面端 SSH 兜底）' : '远端部署执行完成')
+      if (deployResult.commandOutput.trim()) {
+        pushGatewayLog('info', deployResult.commandOutput.trim())
+      }
+      pushGatewayLog('success', '远端部署执行完成')
     }
+
+    historySummary =
+      mode === 'build'
+        ? `本地打包成功，产物目录 ${executionDraft.value.overrideOutputDir}`
+        : mode === 'deploy'
+          ? `远端部署成功，已发布到 ${executionDraft.value.environmentName} 环境`
+          : `打包并部署成功，已发布到 ${executionDraft.value.environmentName} 环境`
 
     executionStatus.value = 'success'
     executionStatusMessage.value =
@@ -930,17 +2164,49 @@ async function handleRunExecution() {
       'success',
     )
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : mode === 'build'
-          ? '执行本地打包失败'
-          : '执行部署任务失败'
+    const message = getErrorMessage(error, mode === 'build' ? '执行本地打包失败' : '执行部署任务失败')
+    historySummary =
+      mode === 'build'
+        ? '本地打包失败'
+        : mode === 'deploy'
+          ? `远端部署失败，目标环境 ${executionDraft.value.environmentName}`
+          : `打包并部署失败，目标环境 ${executionDraft.value.environmentName}`
+    historyErrorMessage = message
     executionStatus.value = 'error'
     executionStatusMessage.value = message
     pushGatewayLog('error', message)
-    appStore.setBannerMessage(mode === 'build' ? '本地打包执行失败' : '部署任务执行失败')
-    showToast(mode === 'build' ? '本地打包执行失败' : '部署任务执行失败', 'error')
+    appStore.setBannerMessage(message)
+    showToast(message, 'error')
+  } finally {
+    const finishedAt = new Date().toISOString()
+    const newLogs = gatewayLogs.value
+      .slice(0, Math.max(gatewayLogs.value.length - logStartCount, 0))
+      .map((entry) => `[${entry.timestamp.slice(11, 19)}] ${entry.message}`)
+      .reverse()
+
+    const historyRecord: TaskHistoryRecord = {
+      id: crypto.randomUUID(),
+      projectId: latestScannedProject.value.id,
+      projectName: latestScannedProject.value.name,
+      environmentName: executionDraft.value.environmentName,
+      mode,
+      status: executionStatus.value === 'success' ? 'success' : 'error',
+      buildCommand: executionDraft.value.overrideBuildCommand,
+      outputDir: executionDraft.value.overrideOutputDir,
+      outputPath: buildOutputPath,
+      serverName: historyServerName || undefined,
+      serverHost: historyServerHost || undefined,
+      remotePath: historyRemotePath || undefined,
+      startedAt,
+      finishedAt,
+      durationMs: Math.max(new Date(finishedAt).getTime() - new Date(startedAt).getTime(), 0),
+      summary: historySummary || (executionStatus.value === 'success' ? '执行成功' : '执行失败'),
+      errorMessage: historyErrorMessage || undefined,
+      logs: newLogs.slice(-200),
+    }
+
+    await appendTaskHistory(historyRecord)
+    await refreshTaskHistory(latestScannedProject.value.id)
   }
 }
 
@@ -958,7 +2224,8 @@ async function persistGatewayConfig() {
     appStore.setBannerMessage('已保存网关连接配置')
     showToast('网关配置已保存', 'success')
   } catch (error) {
-    pushGatewayLog('error', error instanceof Error ? error.message : '保存网关连接配置失败')
+    const message = getErrorMessage(error, '保存网关连接配置失败')
+    pushGatewayLog('error', message)
     appStore.setBannerMessage('保存网关连接配置失败')
     showToast('保存网关配置失败', 'error')
   } finally {
@@ -1066,7 +2333,7 @@ async function probeGatewayConnection() {
     pushGatewayLog('error', result.message)
     appStore.setBannerMessage('网关检测失败')
   } catch (error) {
-    const message = error instanceof Error ? error.message : '网关检测失败'
+    const message = getErrorMessage(error, '网关检测失败')
     gatewayProbeStatus.value = 'error'
     gatewayStage.value = '检测失败'
     gatewayProbeSummary.value = message
@@ -1086,12 +2353,16 @@ async function handleImportLocalGatewayConfig() {
     gatewayConfigSource.value = 'local-openclaw'
     gatewayUrl.value = config.url
     gatewayToken.value = config.token
+    openResponsesEnabled.value = config.openResponsesEnabled
     await persistGatewayConfigSilently()
     pushGatewayLog('success', `已导入本机 OpenClaw 配置：${config.sourcePath}`)
+    if (!config.openResponsesEnabled) {
+      pushGatewayLog('warn', '当前 OpenClaw 配置未启用 OpenResponses，AI 判断按钮会返回 404。')
+    }
     appStore.setBannerMessage('已导入本机 OpenClaw 网关配置')
     showToast('已导入本机 OpenClaw 配置', 'success')
   } catch (error) {
-    const message = error instanceof Error ? error.message : '导入本机 OpenClaw 配置失败'
+    const message = getErrorMessage(error, '导入本机 OpenClaw 配置失败')
     pushGatewayLog('error', message)
     appStore.setBannerMessage('导入本机 OpenClaw 配置失败')
     showToast('导入本机 OpenClaw 配置失败', 'error')
@@ -1215,7 +2486,7 @@ function sendGatewayPing() {
     })
     pushGatewayLog('info', '已发送测试消息 ping')
   } catch (error) {
-    pushGatewayLog('error', error instanceof Error ? error.message : '发送测试消息失败')
+    pushGatewayLog('error', getErrorMessage(error, '发送测试消息失败'))
   }
 }
 
@@ -1223,12 +2494,24 @@ onMounted(() => {
   void refreshProjects()
   void refreshServers()
   pushGatewayLog('info', '网关日志面板已就绪')
+  syncProjectInsightHeight()
+
+  projectOverviewResizeObserver = new ResizeObserver(() => {
+    syncProjectInsightHeight()
+  })
+
+  const overviewElement = projectOverviewCardRef.value?.overviewCardRef ?? null
+  if (overviewElement) {
+    projectOverviewResizeObserver.observe(overviewElement)
+  }
+
   void loadGatewayConfig()
     .then((config) => {
       gatewayAuthMode.value = config.authMode
       gatewayConfigSource.value = config.source
       gatewayToken.value = config.token
       gatewayUrl.value = config.url
+      openResponsesEnabled.value = false
       pushGatewayLog('info', '已加载应用本地网关连接配置')
 
       if (config.url.trim() && config.token.trim()) {
@@ -1236,13 +2519,15 @@ onMounted(() => {
       }
     })
     .catch((error) => {
-      pushGatewayLog('warn', error instanceof Error ? error.message : '读取本地网关配置失败')
+      pushGatewayLog('warn', getErrorMessage(error, '读取本地网关配置失败'))
     })
 })
 
 onBeforeUnmount(() => {
   clearReconnectState()
   gatewayClient?.disconnect()
+  projectOverviewResizeObserver?.disconnect()
+  projectOverviewResizeObserver = null
 })
 
 watch(
@@ -1255,9 +2540,377 @@ watch(
     void syncEnvironmentByName(environmentName)
   },
 )
+
+watch(
+  () => [selectedProjectId.value, latestScannedProject.value?.id, latestScannedProject.value?.updatedAt],
+  () => {
+    requestAnimationFrame(() => {
+      projectOverviewResizeObserver?.disconnect()
+      const overviewElement = projectOverviewCardRef.value?.overviewCardRef ?? null
+
+      if (overviewElement) {
+        projectOverviewResizeObserver?.observe(overviewElement)
+      }
+
+      syncProjectInsightHeight()
+    })
+  },
+)
 </script>
 
 <style scoped>
+.project-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 6px;
+}
+
+
+.project-list-page {
+  display: grid;
+  gap: 14px;
+  grid-column: 1 / -1;
+}
+
+.project-card-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 420px));
+  gap: 16px;
+  align-items: start;
+  justify-content: start;
+}
+
+.project-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 132px;
+  padding: 16px 18px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  background: #141a28;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    0 10px 24px rgba(2, 6, 23, 0.2);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.project-card:hover {
+  border-color: rgba(59, 130, 246, 0.26);
+  background: #1c2536;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    0 14px 28px rgba(2, 6, 23, 0.24);
+}
+
+.project-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.project-card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.project-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: #101722;
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+
+.project-icon img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.project-card-body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.project-card-body strong,
+.project-card-body p,
+.project-card-foot span {
+  margin: 0;
+}
+
+.project-card-body strong {
+  color: #e2e8f0;
+  font-size: 13px;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.project-card-body span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.project-card-body p {
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.project-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quick-deploy-button {
+  flex: 0 0 auto;
+  color: #60a5fa;
+  border: 1px solid transparent;
+  background: transparent;
+}
+
+.quick-deploy-button:not(:disabled):hover {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.18);
+  color: #bfdbfe;
+}
+
+.quick-deploy-button:disabled {
+  color: rgba(100, 116, 139, 0.5);
+  opacity: 1;
+}
+
+.delete-project-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.delete-project-button:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+.delete-project-button:active {
+  transform: scale(0.98);
+}
+
+.project-delete-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.project-delete-dialog-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 10px;
+  background: rgba(127, 29, 29, 0.22);
+  color: #fca5a5;
+  flex: 0 0 auto;
+}
+
+.project-delete-dialog-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-delete-dialog-copy strong {
+  color: #f8fafc;
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.project-delete-dialog-copy p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.project-delete-dialog-body {
+  display: grid;
+}
+
+.project-delete-target {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 10px;
+  background: #101722;
+}
+
+.project-delete-target span {
+  color: #8fa1bc;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.project-delete-target strong {
+  color: #f8fafc;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.project-delete-target code {
+  color: #cbd5e1;
+  font-family: 'SFMono-Regular', 'Menlo', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.project-delete-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  width: 100%;
+}
+
+.project-enter-icon {
+  color: #64748b;
+  flex: 0 0 auto;
+}
+
+.project-detail-workspace {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+
+.workspace-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.workspace-delete-button,
+.workspace-back-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.workspace-delete-button {
+  color: #94a3b8;
+}
+
+.workspace-delete-button:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+.workspace-back-button {
+  color: #94a3b8;
+}
+
+.workspace-back-button:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.18);
+  color: #bfdbfe;
+}
+
+.workspace-delete-button:active,
+.workspace-back-button:active {
+  transform: scale(0.98);
+}
+
+.project-detail-stack {
+  display: grid;
+  gap: 20px;
+}
+
+.project-insight-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.75fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.insight-panel {
+  min-width: 0;
+}
+
+.project-script-card {
+  min-height: 372px;
+  overflow: hidden;
+}
+
 .panel-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1268,50 +2921,135 @@ watch(
 .panel-card {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   min-width: 0;
   min-height: 240px;
-  padding: 22px;
-  border: 1px solid rgba(23, 61, 53, 0.1);
-  border-radius: 24px;
-  background: rgba(255, 252, 246, 0.86);
-  box-shadow: 0 18px 48px rgba(23, 61, 53, 0.08);
+  padding: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  background: #141a28;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    0 12px 24px rgba(2, 6, 23, 0.18);
 }
 
-.emphasis-card {
-  grid-column: 1 / -1;
-  min-height: 180px;
-  background:
-    linear-gradient(120deg, rgba(225, 143, 51, 0.14), transparent 42%),
-    rgba(255, 252, 246, 0.92);
+:deep(.quick-deploy-menu) {
+  min-width: 176px;
 }
 
-.eyebrow {
-  margin: 0;
-  color: #8f5724;
+.quick-deploy-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
+.quick-deploy-dialog-header strong {
+  display: block;
+  color: #e2e8f0;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.quick-deploy-dialog-header p {
+  margin: 6px 0 0;
+  color: #64748b;
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  line-height: 1.5;
 }
 
-.emphasis-card h3,
+.quick-deploy-dialog-body {
+  display: grid;
+  gap: 14px;
+}
+
+.quick-deploy-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.quick-deploy-summary-item,
+.quick-deploy-path-card,
+.quick-deploy-log-card {
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 8px;
+  background: #101722;
+}
+
+.quick-deploy-summary-item {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+}
+
+.quick-deploy-summary-item span,
+.quick-deploy-path-card span,
+.quick-deploy-log-card header span,
+.quick-deploy-log-card header small {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.quick-deploy-summary-item strong,
+.quick-deploy-path-card code {
+  color: #e2e8f0;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.quick-deploy-path-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+}
+
+.quick-deploy-path-card code {
+  padding: 0;
+  background: transparent;
+}
+
+.quick-deploy-log-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+.quick-deploy-log-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quick-deploy-log-stream {
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.quick-deploy-log-stream p {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.quick-deploy-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  width: 100%;
+}
+
 .panel-card h3 {
   margin: 0;
-  color: #172725;
-}
-
-.emphasis-card p {
-  max-width: 760px;
-  margin: 0;
-  color: #4f625c;
-  line-height: 1.7;
-}
-
-.import-form {
-  display: grid;
-  gap: 16px;
-  width: min(760px, 100%);
+  color: #e2e8f0;
 }
 
 .field {
@@ -1320,32 +3058,28 @@ watch(
 }
 
 .field span {
-  color: #2f433d;
-  font-size: 13px;
+  color: #cbd5e1;
+  font-size: 12px;
   font-weight: 700;
-}
-
-.import-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 14px;
-}
-
-.inline-message {
-  flex: 1 1 320px;
 }
 
 .card-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
 .card-head span {
-  color: #6d7f7a;
-  font-size: 13px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.section-note {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .task-list {
@@ -1354,34 +3088,65 @@ watch(
   margin: 0;
   padding: 0;
   list-style: none;
-  color: #395049;
+  color: #cbd5e1;
 }
 
 .task-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .task-item code {
   padding: 6px 10px;
-  border-radius: 12px;
-  background: rgba(23, 61, 53, 0.06);
-  color: #173d35;
+  border-radius: 8px;
+  background: #101722;
+  color: #dbeafe;
   font-family: 'SFMono-Regular', 'Menlo', monospace;
-  font-size: 12px;
+  font-size: 11px;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
-.meta-list {
-  display: grid;
+.script-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
   gap: 10px;
-  color: #395049;
+  padding-right: 4px;
 }
 
-.meta-list p {
-  margin: 0;
+.script-item {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px 12px;
+}
+
+.script-name {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.script-item code {
+  flex: 1;
+  display: block;
+  min-width: 0;
+  color: #dbe7ff;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .log-card {
@@ -1392,12 +3157,12 @@ watch(
 .log-stream {
   display: grid;
   gap: 10px;
-  padding: 18px;
-  border-radius: 18px;
-  background: #102724;
+  padding: 16px;
+  border-radius: 8px;
+  background: #101722;
   color: #d8ebe4;
   font-family: 'SFMono-Regular', 'Menlo', monospace;
-  font-size: 13px;
+  font-size: 12px;
   min-width: 0;
   overflow-x: hidden;
 }
@@ -1424,12 +3189,33 @@ watch(
 }
 
 .muted {
-  color: #8daf9f;
+  color: #64748b;
 }
 
 .muted-paragraph {
   margin: 0;
-  color: #6d7f7a;
+  color: #64748b;
+}
+
+.compact-empty {
+  justify-items: start;
+}
+
+.empty-state-icon {
+  width: 20px;
+  height: 20px;
+  color: #64748b;
+}
+
+.compact-empty h4,
+.compact-empty p {
+  margin: 0;
+}
+
+.compact-empty p {
+  font-size: 13px;
+  line-height: 1.65;
+  color: #64748b;
 }
 
 @media (max-width: 960px) {
@@ -1437,9 +3223,12 @@ watch(
     grid-template-columns: 1fr;
   }
 
-  .import-actions {
-    flex-direction: column;
-    align-items: flex-start;
+  .project-insight-row {
+    grid-template-columns: 1fr;
+  }
+
+  .project-card-list {
+    grid-template-columns: 1fr;
   }
 }
 </style>

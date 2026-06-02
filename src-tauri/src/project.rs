@@ -12,8 +12,25 @@ pub struct ProjectScanResult {
     project_type: String,
     package_manager: String,
     scripts: HashMap<String, String>,
+    detected_build_command: String,
+    detected_output_dir: String,
     default_build_command: String,
     default_output_dir: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectAiContextFile {
+    path: String,
+    content: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectAiContextResult {
+    project_path: String,
+    package_json: String,
+    files: Vec<ProjectAiContextFile>,
 }
 
 #[tauri::command]
@@ -59,8 +76,8 @@ pub fn scan_project(project_path: String) -> Result<ProjectScanResult, String> {
     let dependencies = extract_dependency_names(&package_json);
     let project_type = detect_project_type(project_path, &dependencies);
     let package_manager = detect_package_manager(project_path);
-    let default_output_dir = detect_output_dir(&project_type).to_string();
-    let default_build_command = detect_build_command(&scripts, &package_manager);
+    let detected_output_dir = detect_output_dir(&project_type).to_string();
+    let detected_build_command = detect_build_command(&scripts, &package_manager);
 
     Ok(ProjectScanResult {
         name,
@@ -69,8 +86,69 @@ pub fn scan_project(project_path: String) -> Result<ProjectScanResult, String> {
         project_type,
         package_manager,
         scripts,
-        default_build_command,
-        default_output_dir,
+        detected_build_command: detected_build_command.clone(),
+        detected_output_dir: detected_output_dir.clone(),
+        default_build_command: detected_build_command,
+        default_output_dir: detected_output_dir,
+    })
+}
+
+#[tauri::command]
+pub fn scan_project_ai_context(project_path: String) -> Result<ProjectAiContextResult, String> {
+    let project_path = Path::new(&project_path);
+
+    if !project_path.exists() {
+        return Err("项目路径不存在".into());
+    }
+
+    if !project_path.is_dir() {
+        return Err("项目路径不是目录".into());
+    }
+
+    let package_json_path = project_path.join("package.json");
+
+    if !package_json_path.exists() {
+        return Err("未找到 package.json".into());
+    }
+
+    let package_json = std::fs::read_to_string(&package_json_path)
+        .map_err(|error| format!("读取 package.json 失败: {error}"))?;
+
+    let candidate_files = [
+        "vite.config.ts",
+        "vite.config.js",
+        "vite.config.mts",
+        "vite.config.mjs",
+        "vite.config.cts",
+        "vite.config.cjs",
+        "vue.config.js",
+        "webpack.config.js",
+        "webpack.config.ts",
+    ];
+
+    let files = candidate_files
+        .iter()
+        .filter_map(|relative_path| {
+            let file_path = project_path.join(relative_path);
+
+            if !file_path.exists() || !file_path.is_file() {
+                return None;
+            }
+
+            match std::fs::read_to_string(&file_path) {
+                Ok(content) => Some(ProjectAiContextFile {
+                    path: (*relative_path).to_string(),
+                    content,
+                }),
+                Err(_) => None,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    Ok(ProjectAiContextResult {
+        project_path: project_path.to_string_lossy().to_string(),
+        package_json,
+        files,
     })
 }
 

@@ -1,6 +1,8 @@
 import { loadEnvironments, saveEnvironments } from '@/services/storage/environments'
 import type { DeployEnvironmentRecord, EnvironmentFormValue } from '@/types/task'
 
+const ENVIRONMENT_ORDER = ['test', 'prod']
+
 function generateId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID()
@@ -10,11 +12,9 @@ function generateId() {
 }
 
 function sortEnvironments(environments: DeployEnvironmentRecord[]) {
-  const order = ['dev', 'test', 'prod']
-
   return [...environments].sort((left, right) => {
-    const leftIndex = order.indexOf(left.name)
-    const rightIndex = order.indexOf(right.name)
+    const leftIndex = ENVIRONMENT_ORDER.indexOf(left.name)
+    const rightIndex = ENVIRONMENT_ORDER.indexOf(right.name)
 
     if (leftIndex !== -1 || rightIndex !== -1) {
       return (leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex) - (rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex)
@@ -24,9 +24,57 @@ function sortEnvironments(environments: DeployEnvironmentRecord[]) {
   })
 }
 
+export const PRESET_ENVIRONMENTS = ['test', 'prod'] as const
+
+export async function deleteEnvironment(projectId: string, environmentName: string) {
+  const environments = await loadEnvironments()
+  const nextEnvironments = environments.filter(
+    (environment) => !(environment.projectId === projectId && environment.name === environmentName),
+  )
+  await saveEnvironments(nextEnvironments)
+  return sortEnvironments(nextEnvironments.filter((environment) => environment.projectId === projectId))
+}
+
+export function createEnvironmentRecordDraft(name: string): EnvironmentFormValue {
+  return {
+    name,
+    serverId: '',
+    remotePath: '',
+    uploadStrategy: 'overwrite',
+    postDeployCommand: '',
+    enabled: true,
+  }
+}
+
 export async function getProjectEnvironments(projectId: string) {
   const environments = await loadEnvironments()
   return sortEnvironments(environments.filter((environment) => environment.projectId === projectId))
+}
+
+export async function getEnvironmentsByProjectIds(projectIds: string[]) {
+  if (projectIds.length === 0) {
+    return new Map<string, DeployEnvironmentRecord[]>()
+  }
+
+  const environments = await loadEnvironments()
+  const projectIdSet = new Set(projectIds)
+  const result = new Map<string, DeployEnvironmentRecord[]>()
+
+  environments.forEach((environment) => {
+    if (!projectIdSet.has(environment.projectId)) {
+      return
+    }
+
+    const current = result.get(environment.projectId) ?? []
+    current.push(environment)
+    result.set(environment.projectId, current)
+  })
+
+  result.forEach((items, projectId) => {
+    result.set(projectId, sortEnvironments(items))
+  })
+
+  return result
 }
 
 export async function upsertEnvironment(projectId: string, formValue: EnvironmentFormValue) {

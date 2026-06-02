@@ -1,26 +1,26 @@
-import type { ToastMessageOptions } from 'primevue/toast'
-import type { ToastServiceMethods } from 'primevue/toastservice'
-
-let toastApi: ToastServiceMethods | null = null
+import { toast } from 'vue-sonner'
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning'
 
-export function registerToast(service: ToastServiceMethods) {
-  toastApi = service
+function getToastTitle(type: ToastType) {
+  if (type === 'success') {
+    return '操作成功'
+  }
+
+  if (type === 'error') {
+    return '操作失败'
+  }
+
+  if (type === 'warning') {
+    return '请注意'
+  }
+
+  return '提示'
 }
 
 export function showToast(content: string, type: ToastType = 'info') {
-  if (!toastApi) {
-    return
-  }
-
-  const severity: ToastMessageOptions['severity'] =
-    type === 'warning' ? 'warn' : type
-
-  toastApi.add({
-    severity,
-    summary: type === 'success' ? '操作成功' : type === 'error' ? '操作失败' : '提示',
-    detail: content,
-    life: 2600,
+  toast[type === 'warning' ? 'warning' : type](content, {
+    description: getToastTitle(type),
+    duration: 2600,
   })
 }

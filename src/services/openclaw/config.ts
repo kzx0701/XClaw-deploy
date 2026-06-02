@@ -4,6 +4,7 @@ import { isTauriRuntime } from '@/services/project/runtime'
 
 export interface LocalOpenClawGatewayConfig {
   authMode: 'token'
+  openResponsesEnabled: boolean
   sourcePath: string
   token: string
   url: string

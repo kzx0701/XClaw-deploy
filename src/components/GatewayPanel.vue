@@ -3,29 +3,42 @@
     <header class="card-head">
       <div>
         <h3>OpenClaw 网关</h3>
-        <p>连接本地 OpenClaw Gateway，后续的打包执行、部署指令和实时日志都依赖这条连接。</p>
+        <p>连接本地 OpenClaw Gateway，用于后续 AI 辅助、日志分析和智能建议；部署主流程已独立于 Gateway。</p>
       </div>
-      <Tag :severity="connectionSeverity" rounded>{{ connectionStatusLabel }}</Tag>
+      <Badge
+        :variant="resolveBadgeVariant(connectionSeverity)"
+        :class="['rounded-full', resolveBadgeToneClass(connectionSeverity)]"
+      >
+        {{ connectionStatusLabel }}
+      </Badge>
     </header>
 
     <div class="gateway-grid">
       <div class="meta-row">
-        <Tag severity="contrast" rounded>auth: {{ authMode || 'unknown' }}</Tag>
-        <Tag severity="contrast" rounded>
+        <Badge :variant="resolveBadgeVariant('contrast')" :class="['rounded-full', resolveBadgeToneClass('contrast')]">
+          auth: {{ authMode || 'unknown' }}
+        </Badge>
+        <Badge :variant="resolveBadgeVariant('contrast')" :class="['rounded-full', resolveBadgeToneClass('contrast')]">
           来源: {{ gatewayConfigSource === 'local-openclaw' ? '本机 OpenClaw' : '应用内保存' }}
-        </Tag>
-        <Tag :severity="gatewayUrl.trim() ? 'success' : 'danger'" rounded>
+        </Badge>
+        <Badge
+          :variant="resolveBadgeVariant(gatewayUrl.trim() ? 'success' : 'danger')"
+          :class="['rounded-full', resolveBadgeToneClass(gatewayUrl.trim() ? 'success' : 'danger')]"
+        >
           地址{{ gatewayUrl.trim() ? '已填写' : '未填写' }}
-        </Tag>
-        <Tag :severity="gatewayToken.trim() ? 'success' : 'danger'" rounded>
+        </Badge>
+        <Badge
+          :variant="resolveBadgeVariant(gatewayToken.trim() ? 'success' : 'danger')"
+          :class="['rounded-full', resolveBadgeToneClass(gatewayToken.trim() ? 'success' : 'danger')]"
+        >
           Token{{ gatewayToken.trim() ? '已填写' : '未填写' }}
-        </Tag>
+        </Badge>
       </div>
 
       <section class="guide-card">
         <div class="guide-head">
           <h4>首次接入说明</h4>
-          <i class="pi pi-compass" aria-hidden="true" />
+          <Compass class="h-4 w-4" aria-hidden="true" />
         </div>
         <ol class="guide-list">
           <li>先在本机启动 OpenClaw 网关，确保它处于运行状态。</li>
@@ -40,7 +53,7 @@
       <section class="guide-card subtle-card">
         <div class="guide-head">
           <h4>Gateway Token 是什么</h4>
-          <i class="pi pi-key" aria-hidden="true" />
+          <KeyRound class="h-4 w-4" aria-hidden="true" />
         </div>
         <p>
           它是 OpenClaw 网关的访问令牌。只有在网关配置为 <code>token</code> 鉴权时才需要填写；没填时，WebSocket
@@ -73,7 +86,7 @@
             @update:model-value="$emit('update:gateway-token', $event ?? '')"
           />
           <Button
-            icon="pi pi-copy"
+            :icon="Copy"
             severity="secondary"
             outlined
             :disabled="!gatewayToken.trim()"
@@ -81,7 +94,7 @@
             @click="copyGatewayToken"
           />
           <Button
-            :icon="showGatewayToken ? 'pi pi-eye-slash' : 'pi pi-eye'"
+            :icon="showGatewayToken ? EyeOff : Eye"
             severity="secondary"
             text
             rounded
@@ -96,14 +109,15 @@
 
       <div class="actions">
         <Button
+          class="app-primary-button"
           label="连接网关"
-          icon="pi pi-link"
+          :icon="PlugZap"
           :disabled="connectionStatus === 'connected'"
           @click="$emit('connect')"
         />
         <Button
           label="导入本机配置"
-          icon="pi pi-download"
+          :icon="Download"
           severity="secondary"
           outlined
           :loading="isImportingLocalConfig"
@@ -111,7 +125,7 @@
         />
         <Button
           :label="isProbing ? '检测中...' : '检测网关'"
-          icon="pi pi-search"
+          :icon="Search"
           severity="secondary"
           outlined
           :loading="isProbing"
@@ -119,7 +133,7 @@
         />
         <Button
           label="保存配置"
-          icon="pi pi-save"
+          :icon="Save"
           severity="secondary"
           outlined
           :loading="isSavingConfig"
@@ -127,7 +141,7 @@
         />
         <Button
           label="断开连接"
-          icon="pi pi-times-circle"
+          :icon="Unplug"
           severity="secondary"
           text
           :disabled="connectionStatus !== 'connected'"
@@ -135,7 +149,7 @@
         />
         <Button
           label="发送测试消息"
-          icon="pi pi-send"
+          :icon="Send"
           severity="secondary"
           text
           :disabled="connectionStatus !== 'connected'"
@@ -143,14 +157,18 @@
         />
       </div>
 
-      <Message v-if="probeSummary" :severity="probeSeverity" :closable="false">
+      <Alert
+        v-if="probeSummary"
+        :variant="resolveAlertVariant(probeSeverity)"
+        :class="resolveAlertToneClass(probeSeverity)"
+      >
         <strong>检测结果：</strong> {{ probeSummary }}
-      </Message>
+      </Alert>
 
       <section class="guide-card subtle-card">
         <div class="guide-head">
           <h4>连接失败时先看这里</h4>
-          <i class="pi pi-info-circle" aria-hidden="true" />
+          <Info class="h-4 w-4" aria-hidden="true" />
         </div>
         <ul class="tips-list">
           <li>地址填对了，但一会自动关闭：通常是 Token 缺失、错误，或者当前账号没有握手权限。</li>
@@ -164,11 +182,26 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
-import Tag from 'primevue/tag'
+import {
+  Compass,
+  Copy,
+  Download,
+  Eye,
+  EyeOff,
+  Info,
+  KeyRound,
+  PlugZap,
+  Save,
+  Search,
+  Send,
+  Unplug,
+} from 'lucide-vue-next'
+import Alert from '@/components/ui/alert/Alert.vue'
+import Badge from '@/components/ui/badge/Badge.vue'
+import Button from '@/components/ui/button/Button.vue'
+import InputText from '@/components/ui/input/Input.vue'
 
+import { resolveAlertToneClass, resolveAlertVariant, resolveBadgeToneClass, resolveBadgeVariant } from '@/lib/ui-status'
 import { showToast } from '@/services/ui/toast'
 
 const showGatewayToken = ref(false)
@@ -255,7 +288,7 @@ defineEmits<{
 
 .card-head p {
   margin: 8px 0 0;
-  color: #6d7f7a;
+  color: #64748b;
 }
 
 .gateway-grid {
@@ -273,15 +306,13 @@ defineEmits<{
   display: grid;
   gap: 10px;
   padding: 18px;
-  border: 1px solid rgba(23, 61, 53, 0.08);
-  border-radius: 20px;
-  background:
-    linear-gradient(135deg, rgba(225, 143, 51, 0.08), transparent 45%),
-    rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 8px;
+  background: #101722;
 }
 
 .subtle-card {
-  background: rgba(248, 245, 238, 0.9);
+  background: #101722;
 }
 
 .guide-head {
@@ -291,19 +322,15 @@ defineEmits<{
   gap: 12px;
 }
 
-.guide-head i {
-  color: #6d7f7a;
-}
-
 .guide-card h4 {
   margin: 0;
-  color: #172725;
+  color: #e2e8f0;
   font-size: 15px;
 }
 
 .guide-card p {
   margin: 0;
-  color: #435853;
+  color: #cbd5e1;
   line-height: 1.7;
 }
 
@@ -313,12 +340,12 @@ defineEmits<{
   gap: 8px;
   margin: 0;
   padding-left: 18px;
-  color: #2f433d;
+  color: #cbd5e1;
   line-height: 1.7;
 }
 
 .guide-note {
-  color: #637670;
+  color: #64748b;
   font-size: 13px;
 }
 
@@ -328,13 +355,13 @@ defineEmits<{
 }
 
 .field span {
-  color: #2f433d;
+  color: #cbd5e1;
   font-size: 13px;
   font-weight: 700;
 }
 
 .field-help {
-  color: #5d726b;
+  color: #64748b;
   font-size: 12px;
   line-height: 1.6;
 }
@@ -345,8 +372,8 @@ defineEmits<{
 .guide-list code {
   padding: 2px 6px;
   border-radius: 999px;
-  background: rgba(23, 61, 53, 0.08);
-  color: #173d35;
+  background: rgba(59, 130, 246, 0.12);
+  color: #bfdbfe;
   font-size: 12px;
 }
 
