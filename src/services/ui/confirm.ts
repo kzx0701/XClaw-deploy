@@ -5,6 +5,9 @@ export type ConfirmRequest = {
   accept?: () => void
   acceptClass?: string
   acceptLabel?: string
+  detailCode?: string
+  detailLabel?: string
+  detailValue?: string
   header?: string
   icon?: Component | null
   message: string
@@ -30,7 +33,6 @@ export function useConfirm() {
 
 export function closeConfirm() {
   confirmState.visible = false
-  confirmState.current = null
 }
 
 export function acceptConfirm() {

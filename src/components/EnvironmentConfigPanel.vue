@@ -76,128 +76,121 @@
     <Drawer :open="editorVisible" direction="right" dismissible modal @update:open="handleDrawerOpenChange">
       <DrawerContent
         class="environment-drawer border-[rgba(148,163,184,0.12)] bg-[#141a28] text-[#cbd5e1] shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
-        :style="{ width: 'min(560px, 92vw)' }"
+        :style="{ width: 'clamp(720px, 46vw, 860px)', maxWidth: '94vw' }"
       >
         <DrawerHeader class="drawer-head">
           <div class="drawer-head-copy">
             <p class="drawer-eyebrow">环境配置</p>
             <DrawerTitle>{{ editorTitle }}</DrawerTitle>
+            <DrawerDescription>保存后，这个环境就可以在执行部署时直接选择复用。</DrawerDescription>
           </div>
         </DrawerHeader>
 
-        <div v-if="editorDraft" class="drawer-body">
+        <div v-if="editorDraft" class="environment-drawer-scroll">
           <section class="drawer-section">
-            <label class="field">
-              <span>环境名称</span>
-              <InputText
-                :model-value="editorDraft.name"
-                :disabled="isPresetEnvironment"
-                class="w-full"
-                placeholder="例如：开发环境"
-                @update:model-value="updateField('name', $event)"
-              />
-            </label>
+            <div class="drawer-section-head">
+              <h4>基础配置</h4>
+              <p>先确认环境名称、启用状态、目标服务器与部署目录。</p>
+            </div>
 
-            <div class="toggle-field">
+            <div class="create-form-grid">
               <label class="field">
+                <span>环境名称</span>
+                <InputText
+                  :model-value="displayEnvironmentName"
+                  :disabled="isPresetEnvironment"
+                  class="w-full"
+                  placeholder="例如：开发环境"
+                  @update:model-value="updateField('name', $event)"
+                />
+              </label>
+
+              <label class="field">
+                <span>目标服务器</span>
+                <Select :model-value="editorDraft.serverId" @update:model-value="updateField('serverId', $event)">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="请选择服务器" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="server in serverOptions" :key="server.value" :value="server.value">
+                      {{ server.label }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </label>
+
+              <label class="field full-span">
                 <span>启用环境</span>
                 <div class="switch-row">
                   <Switch :model-value="editorDraft.enabled" @update:model-value="updateBoolean('enabled', Boolean($event))" />
+                  <small>{{ editorDraft.enabled ? '已启用，执行部署时可直接选择' : '未启用，执行部署时不会出现在可选环境中' }}</small>
                 </div>
               </label>
+
+              <label class="field full-span">
+                <span>远端部署目录</span>
+                <div class="field-inline-action">
+                  <InputText
+                    :model-value="editorDraft.remotePath"
+                    class="w-full"
+                    placeholder="/root/www/project"
+                    @update:model-value="updateField('remotePath', $event)"
+                  />
+                  <Button variant="outline" @click="$emit('check-environment')">
+                    <FolderSearch class="h-4 w-4" />
+                    <span>检测</span>
+                  </Button>
+                </div>
+                <small>填写服务器上要发布到的目录，例如 `/root/www/admin`。</small>
+              </label>
             </div>
-
-            <label class="field">
-              <span>目标服务器</span>
-              <Select :model-value="editorDraft.serverId" @update:model-value="updateField('serverId', $event)">
-                <SelectTrigger class="w-full">
-                  <SelectValue placeholder="请选择服务器" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="server in serverOptions" :key="server.value" :value="server.value">
-                    {{ server.label }}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </label>
-
-            <label class="field">
-              <span>远端部署目录</span>
-              <div class="field-inline-action">
-                <InputText
-                  :model-value="editorDraft.remotePath"
-                  class="w-full"
-                  placeholder="/root/www/project"
-                  @update:model-value="updateField('remotePath', $event)"
-                />
-                <Button variant="outline" @click="$emit('check-environment')">
-                  <FolderSearch class="h-4 w-4" />
-                  <span>检测</span>
-                </Button>
-              </div>
-              <small>填写服务器上要发布到的目录，例如 `/root/www/admin`。</small>
-            </label>
-
-            <label class="field">
-              <span>上传方式</span>
-              <Select :model-value="editorDraft.uploadStrategy" @update:model-value="updateField('uploadStrategy', $event)">
-                <SelectTrigger class="w-full">
-                  <SelectValue placeholder="请选择上传方式" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="option in uploadStrategyOptions" :key="option.value" :value="option.value">
-                    {{ option.label }}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <small>一般情况下直接覆盖即可；需要清空目录后再传时，再切换到“清空后上传”。</small>
-            </label>
-
-            <label class="field">
-              <span>部署后命令</span>
-              <InputText
-                :model-value="editorDraft.postDeployCommand"
-                class="w-full"
-                placeholder="例如：nginx -s reload"
-                @update:model-value="updateField('postDeployCommand', $event)"
-              />
-              <small>可选。发布完成后在服务器上执行，例如重载 Nginx。</small>
-            </label>
           </section>
 
-          <Alert
-            v-if="selectedServer"
-            :variant="resolveAlertVariant('secondary')"
-            :class="[resolveAlertToneClass('secondary'), 'server-summary']"
-          >
-            已绑定服务器：{{ selectedServer.name }} / {{ selectedServer.host }}:{{ selectedServer.port }}
-          </Alert>
-          <Alert
-            v-else
-            :variant="resolveAlertVariant('secondary')"
-            :class="[resolveAlertToneClass('secondary'), 'server-summary']"
-          >
-            还没有绑定服务器，保存后也可以继续补充。
-          </Alert>
+          <section class="drawer-section">
+            <div class="drawer-section-head">
+              <h4>部署策略</h4>
+              <p>设置上传方式，以及发布完成后的可选后置命令。</p>
+            </div>
+
+            <div class="create-form-grid">
+              <label class="field">
+                <span>上传方式</span>
+                <Select :model-value="editorDraft.uploadStrategy" @update:model-value="updateField('uploadStrategy', $event)">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="请选择上传方式" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="option in uploadStrategyOptions" :key="option.value" :value="option.value">
+                      {{ option.label }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <small>一般情况下直接覆盖即可；需要清空目录后再传时，再切换到“清空后上传”。</small>
+              </label>
+
+              <label class="field">
+                <span>部署后命令</span>
+                <InputText
+                  :model-value="editorDraft.postDeployCommand"
+                  class="w-full"
+                  placeholder="例如：nginx -s reload"
+                  @update:model-value="updateField('postDeployCommand', $event)"
+                />
+                <small>可选。发布完成后在服务器上执行，例如重载 Nginx。</small>
+              </label>
+            </div>
+          </section>
         </div>
 
-        <div class="drawer-actions">
-          <div class="drawer-actions-start">
-            <Button v-if="canDelete" variant="ghost" @click="$emit('delete-environment')">
-              <Trash2 class="h-4 w-4" />
-              <span>删除环境</span>
-            </Button>
-            <Button variant="outline" @click="$emit('reset-environment')">
-              <RotateCcw class="h-4 w-4" />
-              <span>重置配置</span>
-            </Button>
-          </div>
-          <div class="drawer-actions-end">
-            <Button class="app-primary-button" @click="$emit('save-environment')">
-              <Save class="h-4 w-4" />
-              <span>保存配置</span>
-            </Button>
-          </div>
+        <div class="drawer-actions environment-create-actions">
+          <Button variant="secondary" @click="$emit('reset-environment')">
+            <RotateCcw class="h-4 w-4" />
+            <span>重置配置</span>
+          </Button>
+          <Button class="app-primary-button" @click="$emit('save-environment')">
+            <Save class="h-4 w-4" />
+            <span>保存配置</span>
+          </Button>
         </div>
       </DrawerContent>
     </Drawer>
@@ -207,9 +200,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ChevronRight, Compass, FolderSearch, Plus, RotateCcw, Save, Trash2 } from 'lucide-vue-next'
-import Alert from '@/components/ui/alert/Alert.vue'
 import { Button } from '@/components/ui/button'
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { Input as InputText } from '@/components/ui/input'
 import {
   Select,
@@ -220,7 +212,6 @@ import {
 } from '@/components/ui/select'
 import Switch from '@/components/ui/switch/Switch.vue'
 
-import { resolveAlertToneClass, resolveAlertVariant } from '@/lib/ui-status'
 import type { Component } from 'vue'
 import type { EnvironmentFormValue, ServerRecord, UploadStrategy } from '@/types/task'
 
@@ -289,6 +280,22 @@ const editorTitle = computed(() => {
   return `编辑 ${environmentName}`
 })
 
+const displayEnvironmentName = computed(() => {
+  if (!props.editorDraft) {
+    return ''
+  }
+
+  if (props.editorDraft.name === 'test') {
+    return '测试环境'
+  }
+
+  if (props.editorDraft.name === 'prod') {
+    return '生产环境'
+  }
+
+  return props.editorDraft.name
+})
+
 function updateField(field: keyof EnvironmentFormValue, value: string | UploadStrategy | undefined) {
   if (!props.editorDraft) {
     return
@@ -333,11 +340,17 @@ function handleDrawerOpenChange(nextOpen: boolean) {
 
 .card-head h3 {
   margin: 0;
+  color: #f8fafc;
+  font-size: 17px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
 }
 
 .card-head p {
   margin: 8px 0 0;
-  color: #64748b;
+  color: #8b9bb3;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .actions {
@@ -376,11 +389,15 @@ function handleDrawerOpenChange(nextOpen: boolean) {
 }
 
 .environment-card[data-preset='test'] {
-  background: #162033;
+  background:
+    linear-gradient(180deg, rgba(59, 130, 246, 0.12) 0%, rgba(20, 26, 40, 0.98) 42%),
+    #141a28;
 }
 
 .environment-card[data-preset='prod'] {
-  background: #182132;
+  background:
+    linear-gradient(180deg, rgba(16, 185, 129, 0.1) 0%, rgba(20, 26, 40, 0.98) 42%),
+    #141a28;
 }
 
 .environment-card:hover {
@@ -521,18 +538,18 @@ function handleDrawerOpenChange(nextOpen: boolean) {
 }
 
 .drawer-head {
-  display: grid;
-  gap: 10px;
-  padding: 4px 4px 0;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  background: linear-gradient(180deg, rgba(23, 32, 48, 0.98), rgba(20, 26, 40, 0.94)), #141a28;
 }
 
 .drawer-head-copy {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .drawer-eyebrow {
-  margin: 0;
+  margin: 0 0 10px;
   color: #64748b;
   font-size: 11px;
   font-weight: 700;
@@ -540,42 +557,59 @@ function handleDrawerOpenChange(nextOpen: boolean) {
   text-transform: uppercase;
 }
 
-.drawer-body {
+.environment-drawer-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
   display: grid;
-  gap: 12px;
+  align-content: start;
+  gap: 18px;
+  padding: 18px 10px 20px;
 }
 
 .drawer-section {
   display: grid;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  border-radius: 8px;
-  background: #101722;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 12px;
+  background: rgba(16, 23, 34, 0.32);
 }
 
-.summary-item {
+.drawer-section-head {
   display: grid;
-  gap: 8px;
-  padding: 14px 16px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  border-radius: 8px;
-  background: #101722;
+  gap: 6px;
 }
 
-.summary-item span,
-.field small {
-  color: #64748b;
+.drawer-section-head h4,
+.drawer-section-head p {
+  margin: 0;
 }
 
-.summary-item strong {
-  color: #e2e8f0;
+.drawer-section-head h4 {
+  color: #f8fafc;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.drawer-section-head p {
+  color: #8b9bb3;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.create-form-grid {
+  display: grid;
+  gap: 14px;
 }
 
 .field {
   display: grid;
-  gap: 8px;
+  gap: 9px;
+}
+
+.full-span {
+  grid-column: 1 / -1;
 }
 
 .field-inline-action {
@@ -587,50 +621,64 @@ function handleDrawerOpenChange(nextOpen: boolean) {
 
 .field span {
   color: #cbd5e1;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
+  letter-spacing: 0.03em;
 }
 
 .field small {
+  color: #64748b;
   line-height: 1.6;
 }
 
-.toggle-field {
-  display: grid;
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
 }
 
-.switch-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 36px;
+.switch-row small {
+  color: #93a4bd;
+  font-size: 12px;
 }
 
 .drawer-actions {
-  width: 100%;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   flex-wrap: wrap;
+  padding-top: 6px;
 }
 
-.drawer-actions-start,
-.drawer-actions-end {
-  display: flex;
+.environment-create-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  justify-content: stretch;
+  padding: 16px 24px 18px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  background: linear-gradient(180deg, rgba(20, 26, 40, 0.92), rgba(17, 24, 39, 0.98)), #141a28;
 }
 
-.server-summary {
-  margin: 0;
-  border-radius: 8px;
-  background: #101722;
+.environment-create-actions :deep(button) {
+  height: 36px;
+  min-height: 36px;
+  width: 100%;
+  min-width: 0;
+  padding-inline: 14px;
+  justify-content: center;
 }
 
 :deep(.environment-drawer) {
-  background: #111722;
+  display: flex;
+  flex-direction: column;
+  width: clamp(720px, 46vw, 860px);
+  max-width: 94vw;
+  height: 100vh;
+  padding: 0;
+  overflow: hidden;
+  background: #141a28;
 }
 
 @media (max-width: 960px) {
@@ -642,6 +690,24 @@ function handleDrawerOpenChange(nextOpen: boolean) {
 
   .environment-list {
     grid-template-columns: 1fr;
+  }
+
+  .environment-create-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .drawer-head {
+    padding: 20px 18px 16px;
+  }
+
+  .environment-drawer-scroll {
+    padding: 16px 18px 18px;
+  }
+
+  .environment-create-actions {
+    padding: 14px 18px 18px;
   }
 }
 </style>

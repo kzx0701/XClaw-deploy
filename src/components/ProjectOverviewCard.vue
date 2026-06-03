@@ -79,14 +79,14 @@ defineExpose({
 .card-head h3 {
   margin: 0;
   color: #f8fafc;
-  font-size: 18px;
-  line-height: 1.2;
+  font-size: 17px;
+  line-height: 1.25;
 }
 
 .card-head p {
   margin: 8px 0 0;
   color: #8b9bb3;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.6;
 }
 

@@ -197,15 +197,15 @@ function updateBoolean(field: keyof ExecutionDraft, value: boolean | undefined) 
 .card-head h3 {
   margin: 0;
   color: #f8fafc;
-  font-size: 18px;
-  line-height: 1.2;
+  font-size: 17px;
+  line-height: 1.25;
   letter-spacing: -0.01em;
 }
 
 .card-head p {
   margin: 8px 0 0;
   color: #8b9bb3;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -280,7 +280,7 @@ function updateBoolean(field: keyof ExecutionDraft, value: boolean | undefined) 
 
 .summary-head h4 {
   color: #f8fafc;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.3;
 }
 

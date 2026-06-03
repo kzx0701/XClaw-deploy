@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useSlots } from 'vue'
 import { SelectRoot } from 'reka-ui'
 import { cn } from '@/lib/utils'
 import SelectContent from './SelectContent.vue'
@@ -33,6 +33,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: string | number | undefined]
 }>()
 
+const slots = useSlots()
+
 const normalizedOptions = computed(() =>
   props.options.map((option) => {
     if (typeof option === 'object' && option !== null) {
@@ -62,9 +64,16 @@ const selectedKey = computed(() => {
 })
 
 function handleValueChange(nextValue: string) {
+  if (useCustomSlot.value) {
+    emit('update:modelValue', nextValue)
+    return
+  }
+
   const matched = normalizedOptions.value.find((option) => option.key === nextValue)
   emit('update:modelValue', matched?.rawValue)
 }
+
+const useCustomSlot = computed(() => Boolean(slots.default))
 </script>
 
 <template>
@@ -74,18 +83,22 @@ function handleValueChange(nextValue: string) {
     :disabled="disabled"
     @update:model-value="handleValueChange"
   >
-    <SelectTrigger :class="cn(fluid ? 'w-full' : 'w-fit', props.class)">
-      <SelectValue :placeholder="placeholder" />
-    </SelectTrigger>
+    <slot v-if="useCustomSlot" />
 
-    <SelectContent>
-      <SelectItem
-        v-for="option in normalizedOptions"
-        :key="option.key"
-        :value="option.key"
-      >
-        {{ option.label }}
-      </SelectItem>
-    </SelectContent>
+    <template v-else>
+      <SelectTrigger :class="cn(fluid ? 'w-full' : 'w-fit', props.class)">
+        <SelectValue :placeholder="placeholder" />
+      </SelectTrigger>
+
+      <SelectContent>
+        <SelectItem
+          v-for="option in normalizedOptions"
+          :key="option.key"
+          :value="option.key"
+        >
+          {{ option.label }}
+        </SelectItem>
+      </SelectContent>
+    </template>
   </SelectRoot>
 </template>
