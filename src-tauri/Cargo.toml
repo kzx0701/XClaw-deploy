@@ -1,5 +1,5 @@
 [package]
-name = "claw-deploy"
+name = "XClaw"
 version = "0.1.0"
 description = "Desktop workbench for front-end build and deployment with OpenClaw"
 authors = ["Codex"]
