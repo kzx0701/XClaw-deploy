@@ -4,9 +4,10 @@ use tauri::async_runtime;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -379,7 +380,7 @@ fn upload_directory(sftp: &Sftp, local_dir: &Path, remote_dir: &Path) -> Result<
             .file_type()
             .map_err(|error| format!("读取本地文件类型失败 {}: {error}", local_path.display()))?;
 
-        if file_type.is_symlink() || file_type.is_socket() || file_type.is_fifo() || file_type.is_block_device() || file_type.is_char_device() {
+        if should_skip_file_type(&file_type) {
             continue;
         }
 
@@ -415,6 +416,20 @@ fn is_directory(stat: &FileStat) -> bool {
 
 fn is_dot_entry(path: &Path) -> bool {
     matches!(path.file_name().and_then(|name| name.to_str()), Some(".") | Some(".."))
+}
+
+#[cfg(unix)]
+fn should_skip_file_type(file_type: &fs::FileType) -> bool {
+    file_type.is_symlink()
+        || file_type.is_socket()
+        || file_type.is_fifo()
+        || file_type.is_block_device()
+        || file_type.is_char_device()
+}
+
+#[cfg(not(unix))]
+fn should_skip_file_type(file_type: &fs::FileType) -> bool {
+    file_type.is_symlink()
 }
 
 fn expand_tilde(path: &str) -> Result<PathBuf, String> {
