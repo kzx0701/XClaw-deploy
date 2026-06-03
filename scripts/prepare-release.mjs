@@ -11,7 +11,6 @@ if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
 const run = (command, args) => {
   const result = spawnSync(command, args, {
     stdio: "inherit",
-    shell: process.platform === "win32",
   });
 
   if (result.status !== 0) {
@@ -19,8 +18,16 @@ const run = (command, args) => {
   }
 };
 
-run("node", ["scripts/bump-version.mjs", version]);
-run("git", ["add", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml"]);
+run(process.execPath, ["scripts/bump-version.mjs", version]);
+run("git", [
+  "add",
+  "package.json",
+  "src-tauri/tauri.conf.json",
+  "src-tauri/Cargo.toml",
+  "src-tauri/tauri.windows.conf.json",
+  ".github/workflows/release-windows.yml",
+  "docs/windows-release.md",
+]);
 run("git", ["commit", "-m", `release: bump version to ${version}`]);
 run("git", ["tag", `v${version}`]);
 
