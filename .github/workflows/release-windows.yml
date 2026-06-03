@@ -1,0 +1,100 @@
+name: Release Windows Installer
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-x64:
+    name: Build Windows (x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.11.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Import Windows certificate
+        if: ${{ secrets.WINDOWS_CERTIFICATE != '' && secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          New-Item -ItemType Directory -Force -Path certificate | Out-Null
+          Set-Content -Path certificate/tempCert.txt -Value $env:WINDOWS_CERTIFICATE
+          certutil -decode certificate/tempCert.txt certificate/certificate.pfx
+          Remove-Item -LiteralPath certificate/tempCert.txt
+          Import-PfxCertificate `
+            -FilePath certificate/certificate.pfx `
+            -CertStoreLocation Cert:\CurrentUser\My `
+            -Password (ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText)
+
+      - name: Prepare Windows Tauri config
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+          WINDOWS_CERTIFICATE_DIGEST_ALGORITHM: ${{ secrets.WINDOWS_CERTIFICATE_DIGEST_ALGORITHM }}
+          WINDOWS_TIMESTAMP_URL: ${{ secrets.WINDOWS_TIMESTAMP_URL }}
+        run: |
+          $configPath = "src-tauri/tauri.windows.conf.json"
+          $outputPath = "src-tauri/tauri.windows.ci.conf.json"
+          $config = Get-Content -Raw $configPath | ConvertFrom-Json
+
+          if (-not $config.bundle.windows) {
+            $config.bundle | Add-Member -NotePropertyName windows -NotePropertyValue ([pscustomobject]@{})
+          }
+
+          if ($env:WINDOWS_CERTIFICATE_THUMBPRINT -and $env:WINDOWS_CERTIFICATE_DIGEST_ALGORITHM -and $env:WINDOWS_TIMESTAMP_URL) {
+            $config.bundle.windows | Add-Member -NotePropertyName certificateThumbprint -NotePropertyValue $env:WINDOWS_CERTIFICATE_THUMBPRINT -Force
+            $config.bundle.windows | Add-Member -NotePropertyName digestAlgorithm -NotePropertyValue $env:WINDOWS_CERTIFICATE_DIGEST_ALGORITHM -Force
+            $config.bundle.windows | Add-Member -NotePropertyName timestampUrl -NotePropertyValue $env:WINDOWS_TIMESTAMP_URL -Force
+            Write-Host "Windows signing is enabled for this build."
+          } else {
+            Write-Host "Windows signing secrets are incomplete. Building unsigned installer."
+          }
+
+          $config | ConvertTo-Json -Depth 10 | Set-Content -Path $outputPath
+
+      - name: Build Tauri app
+        run: pnpm tauri build --target x86_64-pc-windows-msvc --config src-tauri/tauri.windows.ci.conf.json
+
+      - name: Collect NSIS installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $installer = Get-ChildItem -Path "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis" -Filter "*-setup.exe" -Recurse | Select-Object -First 1
+          if (-not $installer) {
+            Write-Error "NSIS installer not found"
+            exit 1
+          }
+          Copy-Item -LiteralPath $installer.FullName -Destination "release-assets/XClaw-Windows-x64-setup.exe"
+
+      - name: Upload Windows installer to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: release-assets/XClaw-Windows-x64-setup.exe
