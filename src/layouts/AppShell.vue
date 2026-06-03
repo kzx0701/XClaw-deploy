@@ -6,7 +6,7 @@
           <XClawWordmark font-size="1.52rem" />
         </div>
         <p class="mt-2 text-center text-[12px] font-medium leading-4 tracking-[0.04em] text-[#6f819d]">企业级项目自动化打包部署工具</p>
-        <p class="mt-0.5 text-center text-[12px] font-medium leading-4 tracking-[0.04em] text-[#6f819d]">v 1.0.0</p>
+        <p class="mt-0.5 text-center text-[12px] font-medium leading-4 tracking-[0.04em] text-[#6f819d]">v {{ appVersion }}</p>
       </div>
 
       <nav class="flex flex-col gap-2 px-4 py-5" aria-label="主菜单">
@@ -57,8 +57,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useSlots } from "vue";
+import { computed, onMounted, ref, useSlots } from "vue";
 import { FolderKanban, FileText, Server } from "lucide-vue-next";
+import { getVersion } from "@tauri-apps/api/app";
 
 import StatusPill from "@/components/StatusPill.vue";
 import XClawWordmark from "@/components/XClawWordmark.vue";
@@ -66,6 +67,7 @@ import { useAppStore } from "@/stores/app";
 
 const appStore = useAppStore();
 const slots = useSlots();
+const appVersion = ref("1.0.0");
 
 const navItems = [
   {
@@ -111,6 +113,14 @@ const gatewayStatusLabel = computed(() => {
   }
 
   return "未连接";
+});
+
+onMounted(async () => {
+  try {
+    appVersion.value = await getVersion();
+  } catch {
+    appVersion.value = "1.0.0";
+  }
 });
 </script>
 
