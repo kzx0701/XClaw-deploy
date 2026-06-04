@@ -27,7 +27,6 @@
   },
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -37,16 +36,5 @@
       "icons/icon.ico",
       "icons/icon.png"
     ]
-  },
-  "plugins": {
-    "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ5NjQ0NDEwODkwQTU1M0EKUldRNlZRcUpFRVJrU1pObElpbU9SZm5tYXBiYlBkb2JsRlJIdWtCWENkbmQxK3lqZE51Y1hqazcK",
-      "endpoints": [
-        "https://github.com/kzx0701/XClaw-deploy/releases/latest/download/latest-{{target}}-{{arch}}.json"
-      ],
-      "windows": {
-        "installMode": "passive"
-      }
-    }
   }
 }
