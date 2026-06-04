@@ -2,6 +2,11 @@ name: Release Intel DMG
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach Intel assets to, e.g. v1.0.6"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,6 +19,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -37,20 +44,47 @@ jobs:
       - name: Build Tauri app
         env:
           APPLE_SIGNING_IDENTITY: "-"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri build --target x86_64-apple-darwin
 
-      - name: Collect DMG asset
+      - name: Collect release assets
         run: |
           mkdir -p release-assets
           dmg_path=$(find src-tauri/target/x86_64-apple-darwin/release/bundle/dmg -name "*.dmg" -type f | head -n 1)
-          if [ -z "$dmg_path" ]; then
-            echo "DMG file not found"
+          updater_path=$(find src-tauri/target/x86_64-apple-darwin/release/bundle/macos -name "*.app.tar.gz" -type f | head -n 1)
+          updater_sig_path=$(find src-tauri/target/x86_64-apple-darwin/release/bundle/macos -name "*.app.tar.gz.sig" -type f | head -n 1)
+          if [ -z "$dmg_path" ] || [ -z "$updater_path" ] || [ -z "$updater_sig_path" ]; then
+            echo "Required release asset not found"
             exit 1
           fi
           cp "$dmg_path" release-assets/XClaw-macOS-Intel.dmg
+          cp "$updater_path" release-assets/XClaw-darwin-x86_64.app.tar.gz
+          cp "$updater_sig_path" release-assets/XClaw-darwin-x86_64.app.tar.gz.sig
+          VERSION="${{ inputs.tag }}"
+          VERSION="${VERSION#v}"
+          PUB_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          SIGNATURE_CONTENT="$(cat release-assets/XClaw-darwin-x86_64.app.tar.gz.sig)"
+          cat > release-assets/latest-darwin-x86_64.json <<EOF
+          {
+            "version": "${VERSION}",
+            "notes": "See GitHub release notes for details.",
+            "pub_date": "${PUB_DATE}",
+            "platforms": {
+              "darwin-x86_64": {
+                "signature": "${SIGNATURE_CONTENT}",
+                "url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${{ inputs.tag }}/XClaw-darwin-x86_64.app.tar.gz"
+              }
+            }
+          }
+          EOF
 
       - name: Upload Intel DMG to existing release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          files: release-assets/XClaw-macOS-Intel.dmg
+          tag_name: ${{ inputs.tag }}
+          files: |
+            release-assets/XClaw-macOS-Intel.dmg
+            release-assets/XClaw-darwin-x86_64.app.tar.gz
+            release-assets/XClaw-darwin-x86_64.app.tar.gz.sig
+            release-assets/latest-darwin-x86_64.json

@@ -40,17 +40,39 @@ jobs:
       - name: Build Tauri app
         env:
           APPLE_SIGNING_IDENTITY: "-"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri build --target aarch64-apple-darwin
 
-      - name: Collect DMG asset
+      - name: Collect release assets
         run: |
           mkdir -p release-assets
           dmg_path=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -name "*.dmg" -type f | head -n 1)
-          if [ -z "$dmg_path" ]; then
-            echo "DMG file not found"
+          updater_path=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/macos -name "*.app.tar.gz" -type f | head -n 1)
+          updater_sig_path=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/macos -name "*.app.tar.gz.sig" -type f | head -n 1)
+          if [ -z "$dmg_path" ] || [ -z "$updater_path" ] || [ -z "$updater_sig_path" ]; then
+            echo "Required release asset not found"
             exit 1
           fi
           cp "$dmg_path" release-assets/XClaw-macOS-Apple-Silicon.dmg
+          cp "$updater_path" release-assets/XClaw-darwin-aarch64.app.tar.gz
+          cp "$updater_sig_path" release-assets/XClaw-darwin-aarch64.app.tar.gz.sig
+          VERSION="${GITHUB_REF_NAME#v}"
+          PUB_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          SIGNATURE_CONTENT="$(cat release-assets/XClaw-darwin-aarch64.app.tar.gz.sig)"
+          cat > release-assets/latest-darwin-aarch64.json <<EOF
+          {
+            "version": "${VERSION}",
+            "notes": "See GitHub release notes for details.",
+            "pub_date": "${PUB_DATE}",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "${SIGNATURE_CONTENT}",
+                "url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/XClaw-darwin-aarch64.app.tar.gz"
+              }
+            }
+          }
+          EOF
 
       - name: Publish macOS release asset
         uses: softprops/action-gh-release@v2
@@ -70,10 +92,17 @@ jobs:
             - Intel Mac 安装包不再默认随每次发版自动生成。
             - 如有需要，可单独手动触发 Intel 构建流程。
 
+            ## 应用内更新
+            - Apple Silicon 版本支持应用内检查并安装更新。
+
             ## 说明
             - macOS 首次安装如遇到系统安全提示，请在系统设置中允许打开应用。
             - Windows 内部测试版本当前未启用正式代码签名，首次安装可能看到系统安全提示。
-          files: release-assets/XClaw-macOS-Apple-Silicon.dmg
+          files: |
+            release-assets/XClaw-macOS-Apple-Silicon.dmg
+            release-assets/XClaw-darwin-aarch64.app.tar.gz
+            release-assets/XClaw-darwin-aarch64.app.tar.gz.sig
+            release-assets/latest-darwin-aarch64.json
 
   build-windows-x64:
     name: Build Windows (x64)
