@@ -1,6 +1,6 @@
 [package]
 name = "XClaw"
-version = "1.0.9"
+version = "1.0.10"
 description = "Desktop workbench for front-end build and deployment with OpenClaw"
 authors = ["Codex"]
 license = ""
