@@ -204,10 +204,10 @@
         <article class="panel-card log-card">
           <header class="card-head">
             <div>
-              <h3>鏈杩愯鏃ュ織</h3>
-              <p class="section-note">日志页保留更详细的技术信息，方便排查执行问题。</p>
+              <h3>运行日志</h3>
+              <p class="section-note">主要记录打包、部署、网关连接与检测等执行过程中的实时日志。</p>
             </div>
-            <Badge :variant="resolveBadgeVariant('contrast')" :class="['rounded-full', resolveBadgeToneClass('contrast')]">
+            <Badge :variant="resolveBadgeVariant('contrast')" :class="['rounded-full', 'log-stage-badge', resolveBadgeToneClass('contrast')]">
               {{ gatewayStage }}
             </Badge>
           </header>
@@ -426,7 +426,7 @@ const gatewayConfigSource = ref<"manual" | "local-openclaw">("manual");
 const gatewayToken = ref("");
 const gatewayUrl = ref("");
 const gatewayLogs = ref<GatewayLogEntry[]>([]);
-const gatewayStage = ref("绛夊緟杩炴帴");
+const gatewayStage = ref("等待连接");
 const gatewayProbeSummary = ref("");
 const gatewayProbeStatus = ref<"idle" | "success" | "warn" | "error">("idle");
 const isImportingLocalConfig = ref(false);
@@ -599,6 +599,7 @@ function toEnvironmentDraft(environment: DeployEnvironmentRecord): EnvironmentFo
     name: environment.name,
     serverId: environment.serverId,
     remotePath: environment.remotePath,
+    deployMode: environment.deployMode ?? "build-and-deploy",
     uploadStrategy: environment.uploadStrategy,
     postDeployCommand: environment.postDeployCommand,
     enabled: environment.enabled,
@@ -1071,8 +1072,8 @@ async function handlePickDirectory() {
       showToast(`项目 ${importedProjectName} 导入成功`, "success");
     }
   } catch (error) {
-    importError.value = getErrorMessage(error, "鐩綍閫夋嫨澶辫触");
-    appStore.setBannerMessage("鐩綍閫夋嫨澶辫触");
+    importError.value = getErrorMessage(error, "目录选择失败");
+    appStore.setBannerMessage("目录选择失败");
   }
 }
 
@@ -1141,7 +1142,6 @@ async function handleSelectEnvironment(name: string) {
   selectedEnvironmentName.value = name;
   await syncEnvironmentByName(name);
   isEnvironmentEditorVisible.value = true;
-  appStore.setBannerMessage(`宸茶浇鍏ョ幆澧冿細${name}`);
   appStore.setBannerMessage(`已载入环境：${name}`);
 }
 
@@ -1161,6 +1161,7 @@ function handleResetEnvironmentDraft() {
     name: "",
     serverId: "",
     remotePath: "",
+    deployMode: "build-and-deploy",
     uploadStrategy: "overwrite",
     postDeployCommand: "",
     enabled: false,
@@ -1270,6 +1271,7 @@ async function handleConfirmQuickDeploy() {
 
   const startedAt = new Date().toISOString();
   const logStartCount = gatewayLogs.value.length;
+  const deployMode = option.environment.deployMode;
   let buildOutputPath = `${option.project.localPath}/${option.project.defaultOutputDir}`;
   let historySummary = "";
   let historyErrorMessage = "";
@@ -1280,44 +1282,50 @@ async function handleConfirmQuickDeploy() {
 
   pushQuickDeployLog(`准备部署项目 ${option.project.name}`);
   pushQuickDeployLog(`目标环境：${formatEnvironmentLabel(option.environment.name)}`);
+  pushQuickDeployLog(`部署方式：${deployMode === "deploy" ? "直接部署" : "打包 + 部署"}`);
   pushQuickDeployLog(`部署策略：${formatUploadStrategyLabel(option.environment.uploadStrategy)}`);
   pushQuickDeployLog(`目标目录：${option.environment.remotePath}`);
 
   pushGatewayLog("info", `开始一键部署：${option.project.name} -> ${formatEnvironmentLabel(option.environment.name)}`);
 
   try {
-    const buildResult = await runLocalBuild({
-      projectPath: option.project.localPath,
-      buildCommand: option.project.defaultBuildCommand,
-      outputDir: option.project.defaultOutputDir,
-      precheckCommand: option.project.defaultPrecheckCommand,
-      runPrecheck: option.project.defaultPrecheckEnabled,
-    });
+    if (deployMode === "build-and-deploy") {
+      const buildResult = await runLocalBuild({
+        projectPath: option.project.localPath,
+        buildCommand: option.project.defaultBuildCommand,
+        outputDir: option.project.defaultOutputDir,
+        precheckCommand: option.project.defaultPrecheckCommand,
+        runPrecheck: option.project.defaultPrecheckEnabled,
+      });
 
-    if (buildResult.precheckRan) {
-      pushQuickDeployLog(buildResult.precheckSuccess ? "前置校验执行成功" : "前置校验执行失败");
-      pushGatewayLog(
-        buildResult.precheckSuccess ? "success" : "error",
-        buildResult.precheckSuccess ? "前置校验执行成功" : "前置校验执行失败",
-      );
+      if (buildResult.precheckRan) {
+        pushQuickDeployLog(buildResult.precheckSuccess ? "前置校验执行成功" : "前置校验执行失败");
+        pushGatewayLog(
+          buildResult.precheckSuccess ? "success" : "error",
+          buildResult.precheckSuccess ? "前置校验执行成功" : "前置校验执行失败",
+        );
 
-      if (buildResult.precheckOutput.trim()) {
-        pushQuickDeployLog(buildResult.precheckOutput.trim());
-        pushGatewayLog(buildResult.precheckSuccess ? "info" : "error", buildResult.precheckOutput.trim());
+        if (buildResult.precheckOutput.trim()) {
+          pushQuickDeployLog(buildResult.precheckOutput.trim());
+          pushGatewayLog(buildResult.precheckSuccess ? "info" : "error", buildResult.precheckOutput.trim());
+        }
       }
-    }
 
-    if (!buildResult.success) {
-      throw new Error(buildResult.buildOutput.trim() || "本地打包执行失败");
-    }
+      if (!buildResult.success) {
+        throw new Error(buildResult.buildOutput.trim() || "本地打包执行失败");
+      }
 
-    buildOutputPath = buildResult.outputPath;
-    pushQuickDeployLog(`本地打包完成：${buildResult.outputPath}`);
-    pushGatewayLog("success", `一键部署打包完成：${buildResult.outputPath}`);
+      buildOutputPath = buildResult.outputPath;
+      pushQuickDeployLog(`本地打包完成：${buildResult.outputPath}`);
+      pushGatewayLog("success", `一键部署打包完成：${buildResult.outputPath}`);
 
-    if (buildResult.buildOutput.trim()) {
-      pushQuickDeployLog(buildResult.buildOutput.trim());
-      pushGatewayLog("info", buildResult.buildOutput.trim());
+      if (buildResult.buildOutput.trim()) {
+        pushQuickDeployLog(buildResult.buildOutput.trim());
+        pushGatewayLog("info", buildResult.buildOutput.trim());
+      }
+    } else {
+      pushQuickDeployLog(`直接使用已有产物目录：${buildOutputPath}`);
+      pushGatewayLog("info", `一键部署直接使用已有产物目录：${buildOutputPath}`);
     }
 
     pushQuickDeployLog(`开始连接服务器：${option.server.host}:${option.server.port}`);
@@ -1377,7 +1385,7 @@ async function handleConfirmQuickDeploy() {
       projectId: option.project.id,
       projectName: option.project.name,
       environmentName: option.environment.name,
-      mode: "build-and-deploy",
+      mode: deployMode,
       status: quickDeployStage.value === "success" ? "success" : "error",
       buildCommand: option.project.defaultBuildCommand,
       outputDir: option.project.defaultOutputDir,
@@ -2058,10 +2066,10 @@ async function persistGatewayConfig() {
     appStore.setBannerMessage("已保存网关连接配置");
     showToast("网关配置已保存", "success");
   } catch (error) {
-    const message = getErrorMessage(error, "淇濆瓨缃戝叧杩炴帴閰嶇疆澶辫触");
+    const message = getErrorMessage(error, "保存网关连接配置失败");
     pushGatewayLog("error", message);
-    appStore.setBannerMessage("淇濆瓨缃戝叧杩炴帴閰嶇疆澶辫触");
-    showToast("淇濆瓨缃戝叧閰嶇疆澶辫触", "error");
+    appStore.setBannerMessage("保存网关连接配置失败");
+    showToast("保存网关连接配置失败", "error");
   } finally {
     isSavingGatewayConfig.value = false;
   }
@@ -2130,7 +2138,7 @@ async function probeGatewayConnection() {
     gatewayProbeStatus.value = "error";
     gatewayProbeSummary.value = "请先填写网关地址，再执行检测。";
     pushGatewayLog("error", gatewayProbeSummary.value);
-    appStore.setBannerMessage("璇峰厛濉啓缃戝叧鍦板潃");
+    appStore.setBannerMessage("请先填写网关地址");
     return;
   }
 
@@ -2342,7 +2350,7 @@ onMounted(() => {
       }
     })
     .catch((error) => {
-      pushGatewayLog("warn", getErrorMessage(error, "璇诲彇鏈湴缃戝叧閰嶇疆澶辫触"));
+      pushGatewayLog("warn", getErrorMessage(error, "读取本地网关配置失败"));
     });
 });
 
@@ -2817,15 +2825,29 @@ watch(
   min-width: 0;
 }
 
+.log-card .card-head h3 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 16px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
 .log-stream {
   display: grid;
   gap: 10px;
-  padding: 16px;
-  border-radius: 8px;
-  background: #162132;
+  padding: 18px 18px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(41, 56, 82, 0.96), rgba(33, 46, 68, 0.98)),
+    #24324a;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 20px rgba(2, 6, 23, 0.1);
   color: #d8ebe4;
   font-family: "SFMono-Regular", "Menlo", monospace;
-  font-size: 12px;
+  font-size: 11px;
   min-width: 0;
   overflow-x: hidden;
 }
@@ -2851,6 +2873,10 @@ watch(
   color: #ffb0a2;
 }
 
+.log-stage-badge {
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .muted {
   color: #8ea0ba;
 }
@@ -2858,6 +2884,8 @@ watch(
 .muted-paragraph {
   margin: 0;
   color: #8ea0ba;
+  font-size: 12px;
+  line-height: 1.7;
 }
 
 .project-empty-shell {

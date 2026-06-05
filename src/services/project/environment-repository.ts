@@ -40,6 +40,7 @@ export function createEnvironmentRecordDraft(name: string): EnvironmentFormValue
     name,
     serverId: '',
     remotePath: '',
+    deployMode: 'build-and-deploy',
     uploadStrategy: 'overwrite',
     postDeployCommand: '',
     enabled: true,

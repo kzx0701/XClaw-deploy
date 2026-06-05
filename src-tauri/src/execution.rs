@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::path::Path;
 use std::process::Command;
 use tauri::async_runtime;
@@ -101,9 +102,22 @@ struct CommandOutput {
 }
 
 fn run_shell_command(project_path: &Path, command: &str) -> Result<CommandOutput, String> {
-    let output = Command::new("sh")
-        .arg("-lc")
-        .arg(command)
+    #[cfg(target_os = "windows")]
+    let mut shell_command = {
+        let mut shell_command = Command::new("cmd");
+        shell_command.args(["/C", command]);
+        shell_command
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let mut shell_command = {
+        let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+        let mut shell_command = Command::new(shell);
+        shell_command.args(["-lic", command]);
+        shell_command
+    };
+
+    let output = shell_command
         .current_dir(project_path)
         .output()
         .map_err(|error| format!("执行命令失败: {error}"))?;

@@ -160,11 +160,17 @@ function formatDuration(durationMs: number) {
 .card-head h3,
 .log-preview-head h4 {
   margin: 0;
+  color: #f8fafc;
+  font-size: 16px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
 }
 
 .card-head p {
   margin: 8px 0 0;
-  color: #64748b;
+  color: #a7b6cc;
+  font-size: 11px;
+  line-height: 1.7;
 }
 
 .history-layout {
@@ -205,7 +211,7 @@ function formatDuration(durationMs: number) {
 
 .history-item small,
 .detail-item span {
-  color: #64748b;
+  color: #8ea0ba;
 }
 
 .history-top {
@@ -213,8 +219,8 @@ function formatDuration(durationMs: number) {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  font-size: 12px;
-  color: #64748b;
+  font-size: 11px;
+  color: #8ea0ba;
 }
 
 .history-detail {
@@ -280,7 +286,9 @@ function formatDuration(durationMs: number) {
 
 .muted-paragraph {
   margin: 0;
-  color: #64748b;
+  color: #8ea0ba;
+  font-size: 12px;
+  line-height: 1.7;
 }
 
 @media (max-width: 1100px) {

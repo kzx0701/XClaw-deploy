@@ -160,6 +160,21 @@
 
             <div class="create-form-grid">
               <label class="field">
+                <span>部署方式</span>
+                <Select :model-value="editorDraft.deployMode" @update:model-value="updateField('deployMode', $event)">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="请选择部署方式" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="option in deployModeOptions" :key="option.value" :value="option.value">
+                      {{ option.label }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <small>设置一键部署默认是先执行本地打包，还是直接使用已有产物目录发布。</small>
+              </label>
+
+              <label class="field">
                 <span>上传方式</span>
                 <Select :model-value="editorDraft.uploadStrategy" @update:model-value="updateField('uploadStrategy', $event)">
                   <SelectTrigger class="w-full">
@@ -219,11 +234,16 @@ import {
 import Switch from '@/components/ui/switch/Switch.vue'
 
 import type { Component } from 'vue'
-import type { EnvironmentFormValue, ServerRecord, UploadStrategy } from '@/types/task'
+import type { EnvironmentFormValue, ExecutionMode, ServerRecord, UploadStrategy } from '@/types/task'
 
 const uploadStrategyOptions: Array<{ label: string; value: UploadStrategy }> = [
   { label: '直接覆盖', value: 'overwrite' },
   { label: '清空后上传', value: 'clear-and-upload' },
+]
+
+const deployModeOptions: Array<{ label: string; value: Extract<ExecutionMode, 'deploy' | 'build-and-deploy'> }> = [
+  { label: '打包 + 部署', value: 'build-and-deploy' },
+  { label: '直接部署', value: 'deploy' },
 ]
 
 type EnvironmentCardItem = {

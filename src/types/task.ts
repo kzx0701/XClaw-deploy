@@ -70,6 +70,7 @@ export interface DeployEnvironmentRecord {
   name: 'dev' | 'test' | 'prod' | string
   serverId: string
   remotePath: string
+  deployMode: Extract<ExecutionMode, 'deploy' | 'build-and-deploy'>
   uploadStrategy: UploadStrategy
   postDeployCommand: string
   enabled: boolean
@@ -81,6 +82,7 @@ export interface EnvironmentFormValue {
   name: string
   serverId: string
   remotePath: string
+  deployMode: Extract<ExecutionMode, 'deploy' | 'build-and-deploy'>
   uploadStrategy: UploadStrategy
   postDeployCommand: string
   enabled: boolean
