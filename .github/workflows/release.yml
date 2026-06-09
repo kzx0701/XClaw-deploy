@@ -59,7 +59,9 @@ jobs:
           name: XClaw ${{ github.ref_name }}
           body: |
             ## 更新内容
-            - 利用 ui-ux-pro-max skill 重新设计了界面，提升了用户体验        
+            - 优化构建检测链路
+            - 重构页面样式，靠近 OpenCode 风格，提升用户体验
+            - 修复已知问题，提升稳定性       
 
             ## 安装说明
             - `XClaw-macOS-Apple-Silicon.dmg`：适用于 Apple Silicon（M1 / M2 / M3 / M4）
