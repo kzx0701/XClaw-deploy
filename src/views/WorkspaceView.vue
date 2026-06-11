@@ -69,7 +69,7 @@
         @delete-record="workspace.handleDeleteDeploymentHistoryRecord"
       />
 
-      <WorkspaceLogsSection v-else />
+      <WorkspaceSettingsSection v-else />
     </PageTransition>
 
     <WorkspaceQuickDeployDialog
@@ -94,10 +94,10 @@ import AppShell from "@/layouts/AppShell.vue"
 import PageTransition from "@/components/PageTransition.vue"
 
 import WorkspaceDeploymentLogsSection from "./workspace/WorkspaceDeploymentLogsSection.vue"
-import WorkspaceLogsSection from "./workspace/WorkspaceLogsSection.vue"
 import WorkspaceProjectDetailSection from "./workspace/WorkspaceProjectDetailSection.vue"
 import WorkspaceProjectListSection from "./workspace/WorkspaceProjectListSection.vue"
 import WorkspaceQuickDeployDialog from "./workspace/WorkspaceQuickDeployDialog.vue"
+import WorkspaceSettingsSection from "./workspace/WorkspaceSettingsSection.vue"
 import { useWorkspaceController } from "./workspace/useWorkspaceController"
 
 const workspace = proxyRefs(useWorkspaceController())

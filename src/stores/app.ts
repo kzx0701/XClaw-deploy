@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia'
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected'
-type ActivePanel = 'config' | 'servers' | 'deployLogs' | 'logs'
+type ActivePanel = 'config' | 'servers' | 'deployLogs' | 'settings'
 
 export const useAppStore = defineStore('app', () => {
   const connectionStatus = ref<ConnectionStatus>('disconnected')

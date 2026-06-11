@@ -26,10 +26,15 @@
       </nav>
 
       <div class="mt-auto px-3 pb-4">
-        <div class="gateway-status-compact">
-          <span class="gateway-status-label">网关</span>
-          <StatusPill :label="gatewayStatusLabel" :status="appStore.connectionStatus" />
-        </div>
+        <button
+          type="button"
+          :data-active="appStore.activePanel === 'settings'"
+          class="app-shell-footer-entry group"
+          @click="appStore.setActivePanel('settings')"
+        >
+          <Settings2 class="h-4 w-4" />
+          <span>设置</span>
+        </button>
       </div>
     </aside>
 
@@ -42,12 +47,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { FolderKanban, FileClock, RadioTower, Server } from "lucide-vue-next";
+import { onMounted, ref } from "vue";
+import { FileClock, FolderKanban, Server, Settings2 } from "lucide-vue-next";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 
-import StatusPill from "@/components/StatusPill.vue";
 import XClawWordmark from "@/components/XClawWordmark.vue";
 import { useAppStore } from "@/stores/app";
 
@@ -75,24 +79,7 @@ const navItems = [
     label: "日志",
     icon: FileClock,
   },
-  {
-    value: "logs",
-    label: "网关",
-    icon: RadioTower,
-  },
 ] as const;
-
-const gatewayStatusLabel = computed(() => {
-  if (appStore.connectionStatus === "connected") {
-    return "已连接";
-  }
-
-  if (appStore.connectionStatus === "connecting") {
-    return "连接中";
-  }
-
-  return "未连接";
-});
 
 async function openReleasePage() {
   try {
@@ -204,19 +191,45 @@ onMounted(async () => {
   color: #fdfcfc;
 }
 
-.gateway-status-compact {
+.app-shell-footer-entry {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 32px;
-  padding: 0 2px;
+  gap: 11px;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: #424245;
+  text-align: left;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
 }
 
-.gateway-status-label {
+.app-shell-footer-entry svg {
   color: #646262;
-  font-size: 14px;
-  font-weight: 400;
-  letter-spacing: 0;
+  transition: color 140ms ease;
+}
+
+.app-shell-footer-entry:hover {
+  background: #f1eeee;
+  color: #201d1d;
+}
+
+.app-shell-footer-entry:hover svg,
+.app-shell-footer-entry[data-active="true"] svg {
+  color: #201d1d;
+}
+
+.app-shell-footer-entry[data-active="true"] {
+  background: transparent;
+  color: #201d1d;
 }
 </style>
