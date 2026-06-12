@@ -6,6 +6,7 @@ import type { DeployExecutionContext } from '@/types/task'
 export interface LocalDeployResult {
   commandOutput: string
   errorMessage?: string
+  filesUploaded: number
   steps: string[]
   success: boolean
 }

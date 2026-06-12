@@ -27,7 +27,7 @@
           </div>
 
           <div class="deployment-log-cell deployment-log-environment">
-            <span class="environment-chip">{{ formatEnvironment(record.environmentName) }}</span>
+            <span class="environment-chip">{{ formatEnvironmentLabel(record.environmentName) }}</span>
           </div>
 
           <div class="deployment-log-cell deployment-log-server">
@@ -67,6 +67,7 @@ import { computed } from "vue"
 import { FileClock, Trash2 } from "lucide-vue-next"
 
 import type { ExecutionMode, TaskHistoryRecord } from "@/types/task"
+import { formatEnvironmentLabel } from "./formatters"
 
 const props = defineProps<{
   records: TaskHistoryRecord[]
@@ -137,22 +138,6 @@ function formatMode(mode: ExecutionMode) {
   }
 
   return "仅打包"
-}
-
-function formatEnvironment(environmentName: string) {
-  if (environmentName === "dev") {
-    return "开发环境"
-  }
-
-  if (environmentName === "test") {
-    return "测试环境"
-  }
-
-  if (environmentName === "prod") {
-    return "生产环境"
-  }
-
-  return environmentName || "未记录"
 }
 </script>
 

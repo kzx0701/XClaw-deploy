@@ -6,6 +6,7 @@ use std::time::SystemTime;
 use tauri::async_runtime;
 
 use crate::build_artifact::{resolve_artifact_dir, ArtifactResolution};
+use crate::utils::combine_command_output;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -148,23 +149,31 @@ fn run_shell_command(project_path: &Path, command: &str) -> Result<CommandOutput
         shell_command
     };
 
-    let output = shell_command
+    let mut child = shell_command
         .current_dir(project_path)
-        .output()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
         .map_err(|error| format!("执行命令失败: {error}"))?;
 
-    Ok(CommandOutput {
-        status: output.status.code().unwrap_or(-1),
-        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-    })
-}
+    let mut stdout = String::new();
+    let mut stderr = String::new();
 
-fn combine_command_output(stdout: &str, stderr: &str) -> String {
-    match (stdout.trim(), stderr.trim()) {
-        ("", "") => String::new(),
-        ("", stderr) => stderr.to_string(),
-        (stdout, "") => stdout.to_string(),
-        (stdout, stderr) => format!("{stdout}\n{stderr}"),
+    if let Some(mut buf) = child.stdout.take() {
+        std::io::Read::read_to_string(&mut buf, &mut stdout).unwrap_or(0);
     }
+
+    if let Some(mut buf) = child.stderr.take() {
+        std::io::Read::read_to_string(&mut buf, &mut stderr).unwrap_or(0);
+    }
+
+    let exit_status = child
+        .wait()
+        .map_err(|error| format!("等待命令完成失败: {error}"))?;
+
+    Ok(CommandOutput {
+        status: exit_status.code().unwrap_or(-1),
+        stdout,
+        stderr,
+    })
 }

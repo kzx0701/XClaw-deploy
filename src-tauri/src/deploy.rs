@@ -9,6 +9,8 @@ use std::time::Duration;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 
+use crate::utils::combine_command_output;
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Clone)]
@@ -45,6 +47,7 @@ pub struct LocalDeployResult {
     steps: Vec<String>,
     command_output: String,
     error_message: Option<String>,
+    files_uploaded: u32,
 }
 
 #[derive(Serialize)]
@@ -120,8 +123,8 @@ fn execute_local_deploy(request: LocalDeployRequest) -> Result<LocalDeployResult
     }
 
     steps.push("正在上传本地产物".into());
-    upload_directory(&sftp, output_path, remote_root)?;
-    steps.push("已上传本地产物".into());
+    let files_uploaded = upload_directory(&sftp, output_path, remote_root)?;
+    steps.push(format!("已上传本地产物，共 {} 个文件", files_uploaded));
 
     let post_command = request.post_deploy_command.trim();
 
@@ -139,6 +142,7 @@ fn execute_local_deploy(request: LocalDeployRequest) -> Result<LocalDeployResult
         steps,
         command_output: logs.join("\n"),
         error_message: None,
+        files_uploaded,
     })
 }
 
@@ -185,16 +189,22 @@ fn execute_server_connection_check(
     })
 }
 
-fn authenticate_session(session: &Session, request: &LocalDeployRequest) -> Result<(), String> {
-    let username = request.username.trim();
+fn do_authenticate(
+    session: &Session,
+    username: &str,
+    auth_type: &str,
+    password: &str,
+    key_path: &str,
+) -> Result<(), String> {
+    let username = username.trim();
 
     if username.is_empty() {
         return Err("服务器用户名不能为空".into());
     }
 
-    match request.auth_type.trim() {
+    match auth_type.trim() {
         "password" => {
-            let password = request.password.trim();
+            let password = password.trim();
 
             if password.is_empty() {
                 return Err("密码认证模式下，服务器密码不能为空".into());
@@ -205,7 +215,7 @@ fn authenticate_session(session: &Session, request: &LocalDeployRequest) -> Resu
                 .map_err(|error| format!("密码认证失败: {error}"))?;
         }
         "privateKey" => {
-            let key_path = request.private_key_path.trim();
+            let key_path = key_path.trim();
 
             if key_path.is_empty() {
                 return Err("私钥认证模式下，私钥路径不能为空".into());
@@ -223,50 +233,32 @@ fn authenticate_session(session: &Session, request: &LocalDeployRequest) -> Resu
     }
 
     Ok(())
+}
+
+fn authenticate_session(session: &Session, request: &LocalDeployRequest) -> Result<(), String> {
+    do_authenticate(
+        session,
+        &request.username,
+        &request.auth_type,
+        &request.password,
+        &request.private_key_path,
+    )
 }
 
 fn authenticate_check_session(
     session: &Session,
     request: &ServerConnectionCheckRequest,
 ) -> Result<(), String> {
-    let username = request.username.trim();
-
-    if username.is_empty() {
-        return Err("服务器用户名不能为空".into());
-    }
-
-    match request.auth_type.trim() {
-        "password" => {
-            let password = request.password.trim();
-
-            if password.is_empty() {
-                return Err("密码认证模式下，服务器密码不能为空".into());
-            }
-
-            session
-                .userauth_password(username, password)
-                .map_err(|error| format!("密码认证失败: {error}"))?;
-        }
-        "privateKey" => {
-            let key_path = request.private_key_path.trim();
-
-            if key_path.is_empty() {
-                return Err("私钥认证模式下，私钥路径不能为空".into());
-            }
-
-            let resolved_key_path = expand_tilde(key_path)?;
-
-            session
-                .userauth_pubkey_file(username, None, &resolved_key_path, None)
-                .map_err(|error| format!("私钥认证失败: {error}"))?;
-        }
-        _ => {
-            return Err("不支持的服务器认证方式".into());
-        }
-    }
-
-    Ok(())
+    do_authenticate(
+        session,
+        &request.username,
+        &request.auth_type,
+        &request.password,
+        &request.private_key_path,
+    )
 }
+
+const REMOTE_COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
 
 fn run_remote_command(session: &Session, command: &str) -> Result<String, String> {
     let mut channel = session
@@ -277,12 +269,32 @@ fn run_remote_command(session: &Session, command: &str) -> Result<String, String
         .exec(command)
         .map_err(|error| format!("执行远端命令失败: {error}"))?;
 
+    let start_time = std::time::Instant::now();
     let mut stdout = String::new();
-    channel
-        .read_to_string(&mut stdout)
-        .map_err(|error| format!("读取远端命令输出失败: {error}"))?;
-
     let mut stderr = String::new();
+
+    loop {
+        if start_time.elapsed() > REMOTE_COMMAND_TIMEOUT {
+            let _ = channel.close();
+            let _ = channel.wait_close();
+            return Err(format!("远端命令执行超时（{} 秒）", REMOTE_COMMAND_TIMEOUT.as_secs()));
+        }
+
+        if channel.eof() {
+            break;
+        }
+
+        let mut buf = [0u8; 4096];
+        match channel.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                let chunk = String::from_utf8_lossy(&buf[..n]);
+                stdout.push_str(&chunk);
+            }
+            Err(_) => break,
+        }
+    }
+
     channel
         .stderr()
         .read_to_string(&mut stderr)
@@ -368,9 +380,10 @@ fn remove_remote_entry(sftp: &Sftp, path: &Path, stat: &FileStat) -> Result<(), 
     Ok(())
 }
 
-fn upload_directory(sftp: &Sftp, local_dir: &Path, remote_dir: &Path) -> Result<(), String> {
+fn upload_directory(sftp: &Sftp, local_dir: &Path, remote_dir: &Path) -> Result<u32, String> {
     let entries = fs::read_dir(local_dir)
         .map_err(|error| format!("读取本地目录失败 {}: {error}", local_dir.display()))?;
+    let mut files_uploaded = 0;
 
     for entry in entries {
         let entry = entry.map_err(|error| format!("读取本地目录项失败: {error}"))?;
@@ -386,26 +399,55 @@ fn upload_directory(sftp: &Sftp, local_dir: &Path, remote_dir: &Path) -> Result<
 
         if local_path.is_dir() {
           ensure_remote_dir(sftp, &remote_path)?;
-          upload_directory(sftp, &local_path, &remote_path)?;
+          files_uploaded += upload_directory(sftp, &local_path, &remote_path)?;
         } else {
           upload_file(sftp, &local_path, &remote_path)?;
+          files_uploaded += 1;
         }
     }
 
-    Ok(())
+    Ok(files_uploaded)
 }
 
 fn upload_file(sftp: &Sftp, local_file: &Path, remote_file: &Path) -> Result<(), String> {
-    let bytes = fs::read(local_file)
+    let mut local = fs::File::open(local_file)
         .map_err(|error| format!("读取本地文件失败 {}: {error}", local_file.display()))?;
 
     let mut remote = sftp
         .create(remote_file)
         .map_err(|error| format!("创建远端文件失败 {}: {error}", remote_file.display()))?;
 
-    remote
-        .write_all(&bytes)
-        .map_err(|error| format!("写入远端文件失败 {}: {error}", remote_file.display()))?;
+    let mut buffer = [0u8; 8192];
+    loop {
+        let bytes_read = local.read(&mut buffer)
+            .map_err(|error| format!("读取本地文件失败 {}: {error}", local_file.display()))?;
+
+        if bytes_read == 0 {
+            break;
+        }
+
+        remote.write_all(&buffer[..bytes_read])
+            .map_err(|error| format!("写入远端文件失败 {}: {error}", remote_file.display()))?;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(metadata) = fs::metadata(local_file) {
+            let mode = metadata.permissions().mode();
+            let _ = sftp.setstat(
+                remote_file,
+                FileStat {
+                    perm: Some(mode & 0o7777),
+                    size: None,
+                    uid: None,
+                    gid: None,
+                    atime: None,
+                    mtime: None,
+                },
+            );
+        }
+    }
 
     Ok(())
 }
@@ -433,19 +475,15 @@ fn should_skip_file_type(file_type: &fs::FileType) -> bool {
 }
 
 fn expand_tilde(path: &str) -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").map_err(|_| "无法解析当前用户 HOME 目录".to_string())?;
+
+    if path == "~" {
+        return Ok(PathBuf::from(&home));
+    }
+
     if let Some(stripped) = path.strip_prefix("~/") {
-        let home = std::env::var("HOME").map_err(|_| "无法解析当前用户 HOME 目录".to_string())?;
         return Ok(Path::new(&home).join(stripped));
     }
 
     Ok(PathBuf::from(path))
-}
-
-fn combine_command_output(stdout: &str, stderr: &str) -> String {
-    match (stdout.trim(), stderr.trim()) {
-        ("", "") => String::new(),
-        ("", stderr) => stderr.to_string(),
-        (stdout, "") => stdout.to_string(),
-        (stdout, stderr) => format!("{stdout}\n{stderr}"),
-    }
 }

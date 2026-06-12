@@ -68,12 +68,6 @@ export interface ProjectAiRecommendation {
   alternatives: string[]
 }
 
-export interface GatewayAiProjectReviewRequest {
-  context: ProjectAiContext
-  token: string
-  url: string
-}
-
 export interface DeployEnvironmentRecord {
   id: string
   projectId: string
@@ -187,12 +181,6 @@ export interface DeployExecutionContext {
   remotePath: string
   server: ServerRecord
   uploadStrategy: UploadStrategy
-}
-
-export interface DeployExecutionResult {
-  errorMessage?: string
-  success: boolean
-  steps: string[]
 }
 
 export interface ServerConnectionCheckRequest {

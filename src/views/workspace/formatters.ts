@@ -1,6 +1,10 @@
 import type { UploadStrategy } from "@/types/task"
 
 export function formatEnvironmentLabel(name: string) {
+  if (name === "dev") {
+    return "开发环境"
+  }
+
   if (name === "test") {
     return "测试环境"
   }

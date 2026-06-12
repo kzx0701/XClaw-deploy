@@ -173,7 +173,7 @@ fn artifact_score(path: &Path) -> i32 {
         score += 10;
     }
 
-    for child_name in ["assets", "static", "_next", "_nuxt", "css", "js"] {
+    for child_name in ["assets", "static", "_next", "_nuxt", "css", "js", "media"] {
         if path.join(child_name).is_dir() {
             score += 3;
         }

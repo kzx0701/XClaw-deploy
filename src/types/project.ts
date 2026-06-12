@@ -1,4 +1,4 @@
-export type ProjectType = 'vite-vue' | 'vite-react' | 'vue-cli' | 'react' | 'unknown'
+export type ProjectType = 'vite-vue' | 'vite-react' | 'vue-cli' | 'react' | 'next' | 'nuxt' | 'astro' | 'sveltekit' | 'static-generator' | 'unknown'
 
 export interface ProjectSummary {
   id: string
