@@ -66,7 +66,15 @@
       <WorkspaceDeploymentLogsSection
         v-else-if="workspace.appStore.activePanel === 'deployLogs'"
         :records="workspace.deploymentHistoryRecords"
+        :projects="projectListItems"
+        :filter="workspace.deployLogFilter"
+        :filtered-records="workspace.filteredDeploymentRecords"
+        :has-active-filter="workspace.hasActiveDeployLogFilter"
         @delete-record="workspace.handleDeleteDeploymentHistoryRecord"
+        @reset-filter="workspace.resetDeployLogFilter"
+        @update:filter-project="workspace.updateFilterProject"
+        @update:filter-environment="workspace.updateFilterEnvironment"
+        @update:filter-status="workspace.updateFilterStatus"
       />
 
       <WorkspaceSettingsSection v-else />

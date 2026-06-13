@@ -4,13 +4,14 @@ import { getTaskHistory, deleteTaskHistoryRecord } from "@/services/task-history
 import { showToast } from "@/services/ui/toast"
 import { runServerConnectionCheck } from "@/services/execution/connection-check"
 import { useAppStore } from "@/stores/app"
-import type { ExecutionDraft, ExecutionStatus, TaskHistoryRecord } from "@/types/task"
+import type { ExecutionDraft, ExecutionStatus, TaskHistoryRecord, TaskHistoryStatus } from "@/types/task"
 import { useProjectManager } from "./useWorkspace/useProjectManager"
 import { useEnvironmentManager } from "./useWorkspace/useEnvironmentManager"
 import { useServerManager } from "./useWorkspace/useServerManager"
 import { useExecutionEngine } from "./useWorkspace/useExecutionEngine"
 import { useQuickDeploy } from "./useWorkspace/useQuickDeploy"
 import { useLogs } from "./useWorkspace/useLogs"
+import { useDeployLogFilter } from "./useWorkspace/useDeployLogFilter"
 
 export function useWorkspaceController() {
   const appStore = useAppStore()
@@ -117,6 +118,20 @@ export function useWorkspaceController() {
     refreshTaskHistory,
   })
 
+  const deployLogFilter = useDeployLogFilter(deploymentHistoryRecords)
+
+  function updateFilterProject(projectId: string | null) {
+    deployLogFilter.filter.value.projectId = projectId
+  }
+
+  function updateFilterEnvironment(environmentName: string | null) {
+    deployLogFilter.filter.value.environmentName = environmentName
+  }
+
+  function updateFilterStatus(status: TaskHistoryStatus | null) {
+    deployLogFilter.filter.value.status = status
+  }
+
   async function handleSelectProject(projectId: string) {
     await projectManager.handleSelectProject(projectId)
 
@@ -165,6 +180,13 @@ export function useWorkspaceController() {
     servers: serverManager.servers,
     taskHistoryRecords,
     deploymentHistoryRecords,
+    filteredDeploymentRecords: deployLogFilter.filteredRecords,
+    deployLogFilter: deployLogFilter.filter,
+    hasActiveDeployLogFilter: deployLogFilter.hasActiveFilter,
+    resetDeployLogFilter: deployLogFilter.resetFilter,
+    updateFilterProject,
+    updateFilterEnvironment,
+    updateFilterStatus,
     selectedTaskHistoryId,
     isCreatingServer: serverManager.isCreatingServer,
     selectedServerId: serverManager.selectedServerId,

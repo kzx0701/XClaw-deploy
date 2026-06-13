@@ -1,18 +1,175 @@
 <template>
   <section class="deployment-log-page">
+    <WorkspaceToolbarPanel>
+      <template #search>
+        <div class="deployment-log-search-field">
+          <Search class="deployment-log-search-icon" :size="16" />
+          <InputText
+            :model-value="filter.keyword"
+            class="deployment-log-search-input"
+            placeholder="搜索项目名 / 服务器..."
+            @update:model-value="(v: any) => (filter.keyword = v ?? '')"
+          />
+        </div>
+      </template>
+    </WorkspaceToolbarPanel>
+
     <article class="deployment-log-table" aria-label="部署日志">
       <header class="deployment-log-head">
-        <div class="deployment-log-cell deployment-log-date">部署时间</div>
-        <div class="deployment-log-cell deployment-log-project">部署项目</div>
-        <div class="deployment-log-cell deployment-log-mode">部署方式</div>
-        <div class="deployment-log-cell deployment-log-environment">部署环境</div>
-        <div class="deployment-log-cell deployment-log-server">部署服务器</div>
-        <div class="deployment-log-cell deployment-log-result">部署结果</div>
+        <div class="deployment-log-cell deployment-log-date">
+          <span>部署时间</span>
+        </div>
+        <div class="deployment-log-cell deployment-log-project">
+          <span>部署项目</span>
+          <Popover v-model:open="projectFilterOpen">
+            <PopoverTrigger as-child>
+              <button
+                type="button"
+                class="deployment-log-header-filter"
+                :data-active="filter.projectId !== null"
+                title="按项目筛选"
+              >
+                <Filter :size="12" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent class="deployment-log-popover" align="start" :side-offset="4">
+              <div class="deployment-log-popover-header">
+                <span>选择项目</span>
+              </div>
+              <div class="deployment-log-popover-list">
+                <button
+                  type="button"
+                  class="deployment-log-popover-item"
+                  :data-active="filter.projectId === null"
+                  @click="selectProject(null)"
+                >
+                  全部项目
+                </button>
+                <button
+                  v-for="project in projects"
+                  :key="project.id"
+                  type="button"
+                  class="deployment-log-popover-item"
+                  :data-active="filter.projectId === project.id"
+                  @click="selectProject(project.id)"
+                >
+                  {{ project.name }}
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+        <div class="deployment-log-cell deployment-log-mode">
+          <span>部署方式</span>
+        </div>
+        <div class="deployment-log-cell deployment-log-environment">
+          <span>部署环境</span>
+          <Popover v-model:open="environmentFilterOpen">
+            <PopoverTrigger as-child>
+              <button
+                type="button"
+                class="deployment-log-header-filter"
+                :data-active="filter.environmentName !== null"
+                title="按环境筛选"
+              >
+                <Filter :size="12" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent class="deployment-log-popover" align="start" :side-offset="4">
+              <div class="deployment-log-popover-header">
+                <span>选择环境</span>
+              </div>
+              <div class="deployment-log-popover-list">
+                <button
+                  type="button"
+                  class="deployment-log-popover-item"
+                  :data-active="filter.environmentName === null"
+                  @click="selectEnvironment(null)"
+                >
+                  全部环境
+                </button>
+                <button
+                  type="button"
+                  class="deployment-log-popover-item"
+                  :data-active="filter.environmentName === 'dev'"
+                  @click="selectEnvironment('dev')"
+                >
+                  开发环境
+                </button>
+                <button
+                  type="button"
+                  class="deployment-log-popover-item"
+                  :data-active="filter.environmentName === 'test'"
+                  @click="selectEnvironment('test')"
+                >
+                  测试环境
+                </button>
+                <button
+                  type="button"
+                  class="deployment-log-popover-item"
+                  :data-active="filter.environmentName === 'prod'"
+                  @click="selectEnvironment('prod')"
+                >
+                  生产环境
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+        <div class="deployment-log-cell deployment-log-server">
+          <span>部署服务器</span>
+        </div>
+        <div class="deployment-log-cell deployment-log-result">
+          <span>部署结果</span>
+          <Popover v-model:open="statusFilterOpen">
+            <PopoverTrigger as-child>
+              <button
+                type="button"
+                class="deployment-log-header-filter"
+                :data-active="filter.status !== null"
+                title="按状态筛选"
+              >
+                <Filter :size="12" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent class="deployment-log-popover" align="start" :side-offset="4">
+              <div class="deployment-log-popover-header">
+                <span>选择状态</span>
+              </div>
+              <div class="deployment-log-popover-list">
+                <button
+                  type="button"
+                  class="deployment-log-popover-item"
+                  :data-active="filter.status === null"
+                  @click="selectStatus(null)"
+                >
+                  全部状态
+                </button>
+                <button
+                  type="button"
+                  class="deployment-log-popover-item"
+                  :data-active="filter.status === 'success'"
+                  @click="selectStatus('success')"
+                >
+                  成功
+                </button>
+                <button
+                  type="button"
+                  class="deployment-log-popover-item"
+                  :data-active="filter.status === 'error'"
+                  @click="selectStatus('error')"
+                >
+                  失败
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
         <div class="deployment-log-action-head">操作</div>
       </header>
 
-      <div v-if="deployRecords.length > 0" class="deployment-log-body">
-        <div v-for="record in deployRecords" :key="record.id" class="deployment-log-row">
+      <div v-if="filteredRecords.length > 0" class="deployment-log-body">
+        <div v-for="record in filteredRecords" :key="record.id" class="deployment-log-row">
           <div class="deployment-log-cell deployment-log-date">
             <strong>{{ formatDate(record.finishedAt) }}</strong>
             <span>{{ formatFinishedMeta(record.finishedAt, record.durationMs) }}</span>
@@ -53,6 +210,12 @@
         </div>
       </div>
 
+      <div v-else-if="hasActiveFilter" class="deployment-log-empty">
+        <Search class="h-5 w-5" aria-hidden="true" />
+        <p>没有匹配的记录</p>
+        <small>尝试调整筛选条件或重置筛选。</small>
+      </div>
+
       <div v-else class="deployment-log-empty">
         <FileClock class="h-5 w-5" aria-hidden="true" />
         <p>暂无部署日志</p>
@@ -63,21 +226,52 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
-import { FileClock, Trash2 } from "lucide-vue-next"
+import { ref } from "vue"
+import { FileClock, Filter, Search, Trash2 } from "lucide-vue-next"
 
-import type { ExecutionMode, TaskHistoryRecord } from "@/types/task"
+import WorkspaceToolbarPanel from "@/components/workspace-header/WorkspaceToolbarPanel.vue"
+import { Input as InputText } from "@/components/ui/input"
+import Popover from "@/components/ui/popover/Popover.vue"
+import PopoverContent from "@/components/ui/popover/PopoverContent.vue"
+import PopoverTrigger from "@/components/ui/popover/PopoverTrigger.vue"
+import type { ExecutionMode, ProjectRecord, TaskHistoryRecord, TaskHistoryStatus } from "@/types/task"
 import { formatEnvironmentLabel } from "./formatters"
+import type { DeployLogFilterState } from "./useDeployLogFilter"
 
-const props = defineProps<{
+defineProps<{
   records: TaskHistoryRecord[]
+  projects: ProjectRecord[]
+  filter: DeployLogFilterState
+  filteredRecords: TaskHistoryRecord[]
+  hasActiveFilter: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   "delete-record": [recordId: string]
+  "reset-filter": []
+  "update:filter-project": [projectId: string | null]
+  "update:filter-environment": [environmentName: string | null]
+  "update:filter-status": [status: TaskHistoryStatus | null]
 }>()
 
-const deployRecords = computed(() => props.records.filter((record) => record.mode === "deploy" || record.mode === "build-and-deploy"))
+const projectFilterOpen = ref(false)
+const environmentFilterOpen = ref(false)
+const statusFilterOpen = ref(false)
+
+function selectProject(projectId: string | null) {
+  emit("update:filter-project", projectId)
+  projectFilterOpen.value = false
+}
+
+function selectEnvironment(environmentName: string | null) {
+  emit("update:filter-environment", environmentName)
+  environmentFilterOpen.value = false
+}
+
+function selectStatus(status: TaskHistoryStatus | null) {
+  emit("update:filter-status", status)
+  statusFilterOpen.value = false
+}
 
 function formatDate(value: string) {
   const date = new Date(value)
@@ -148,6 +342,24 @@ function formatMode(mode: ExecutionMode) {
   min-width: 0;
 }
 
+.deployment-log-search-field {
+  position: relative;
+  width: 100%;
+}
+
+.deployment-log-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  color: #646262;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.deployment-log-search-input {
+  padding-left: 38px !important;
+}
+
 .deployment-log-table {
   --deployment-log-grid: minmax(140px, 1.2fr) minmax(120px, 1fr) minmax(100px, 0.8fr) minmax(100px, 0.8fr) minmax(180px, 1.2fr) minmax(80px, 0.6fr) minmax(60px, 0.4fr);
 
@@ -180,6 +392,12 @@ function formatMode(mode: ExecutionMode) {
   letter-spacing: 0;
 }
 
+.deployment-log-head .deployment-log-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .deployment-log-row {
   min-height: 60px;
   border-bottom: 1px solid var(--border);
@@ -202,15 +420,6 @@ function formatMode(mode: ExecutionMode) {
   padding: 0 18px;
 }
 
-.deployment-log-action-head {
-  min-width: 0;
-  padding: 0 18px;
-  text-align: center;
-  white-space: nowrap;
-  justify-self: center;
-}
-
-.deployment-log-cell strong,
 .deployment-log-cell span {
   overflow: hidden;
   min-width: 0;
@@ -219,6 +428,10 @@ function formatMode(mode: ExecutionMode) {
 }
 
 .deployment-log-cell strong {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: #201d1d;
   font-size: 14px;
   font-weight: 700;
@@ -231,6 +444,14 @@ function formatMode(mode: ExecutionMode) {
   line-height: 1.5;
 }
 
+.deployment-log-action-head {
+  min-width: 0;
+  padding: 0 18px;
+  text-align: center;
+  white-space: nowrap;
+  justify-self: center;
+}
+
 .deployment-log-mode,
 .deployment-log-environment,
 .deployment-log-result {
@@ -239,6 +460,78 @@ function formatMode(mode: ExecutionMode) {
 
 .deployment-log-result {
   justify-items: start;
+}
+
+.deployment-log-header-filter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: #a0a0a0;
+  cursor: pointer;
+  transition: all 100ms ease;
+}
+
+.deployment-log-header-filter:hover {
+  background: #f1eeee;
+  color: #201d1d;
+  border-color: var(--border);
+}
+
+.deployment-log-header-filter[data-active="true"] {
+  background: #201d1d;
+  border-color: #201d1d;
+  color: #fdfcfc;
+}
+
+.deployment-log-popover {
+  width: 130px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fdfcfc;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.deployment-log-popover-header {
+  padding: 4px 6px 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #a0a0a0;
+  letter-spacing: 0;
+}
+
+.deployment-log-popover-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.deployment-log-popover-item {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #201d1d;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 80ms ease;
+}
+
+.deployment-log-popover-item:hover {
+  background: #f1eeee;
+}
+
+.deployment-log-popover-item[data-active="true"] {
+  background: #201d1d;
+  color: #fdfcfc;
 }
 
 .environment-chip,
